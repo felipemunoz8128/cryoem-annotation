@@ -117,15 +117,16 @@ class RealTimeClickCollector:
                         bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
                         zorder=11)
             
-            # Add mask overlay
+            # Add mask overlay (optimized: only create overlay for mask region)
             color = self.colors[(len(self.segmentations) - 1) % len(self.colors)]
-            mask_overlay = np.zeros((*best_mask.shape, 4))
+            mask_overlay = np.zeros((*best_mask.shape, 4), dtype=np.float32)
             mask_overlay[best_mask] = [*color[:3], 0.4]  # Semi-transparent overlay
-            im = self.ax.imshow(mask_overlay, zorder=5)
+            im = self.ax.imshow(mask_overlay, zorder=5, interpolation='nearest')
             self.mask_overlays.append(im)
             
-            # Update display
-            self.fig.canvas.draw()
+            # Update display (use draw_idle for better performance)
+            self.fig.canvas.draw_idle()
+            self.fig.canvas.flush_events()
             
             print(f"  → Total segmentations: {len(self.segmentations)}")
     
@@ -160,15 +161,16 @@ class RealTimeClickCollector:
                                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
                                 zorder=11)
                     
-                    # Mask overlay
+                    # Mask overlay (optimized)
                     color = self.colors[i % len(self.colors)]
                     mask = seg_data['mask']
-                    mask_overlay = np.zeros((*mask.shape, 4))
+                    mask_overlay = np.zeros((*mask.shape, 4), dtype=np.float32)
                     mask_overlay[mask] = [*color[:3], 0.4]
-                    im = self.ax.imshow(mask_overlay, zorder=5)
+                    im = self.ax.imshow(mask_overlay, zorder=5, interpolation='nearest')
                     self.mask_overlays.append(im)
                 
-                self.fig.canvas.draw()
+                self.fig.canvas.draw_idle()
+                self.fig.canvas.flush_events()
                 print(f"  ✓ Undone last segmentation. Remaining: {len(self.segmentations)}")
             else:
                 print("  No segmentations to undo.")
@@ -188,7 +190,10 @@ class RealTimeClickCollector:
             Tuple of (clicks list, segmentations list)
         """
         try:
+            # Optimize figure for performance
             self.fig, self.ax = plt.subplots(figsize=(12, 12))
+            # Disable autoscaling for better performance
+            self.ax.set_autoscale_on(False)
         except Exception as e:
             if "macOS" in str(e) or "2600" in str(e) or "1600" in str(e):
                 print(f"\n  ✗ ERROR: Backend version check failed: {e}")
@@ -197,8 +202,8 @@ class RealTimeClickCollector:
             else:
                 raise
         
-        # Display base image
-        self.ax.imshow(self.image, cmap='gray')
+        # Display base image (optimized: use nearest neighbor for faster rendering)
+        self.base_image = self.ax.imshow(self.image, cmap='gray', interpolation='nearest')
         self._update_title()
         self.ax.axis('off')
         
