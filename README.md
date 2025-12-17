@@ -27,12 +27,13 @@ Interactive annotation and analysis tool for cryo-electron microscopy micrograph
 
 The easiest way to install with all dependencies isolated:
 
+**CPU-only (works everywhere):**
 ```bash
 # Clone the repository
 git clone https://github.com/felipemunoz8128/cryoem-annotation.git
 cd cryoem-annotation
 
-# Create conda environment with all dependencies
+# Create conda environment (CPU version)
 conda env create -f environment.yml
 
 # Activate the environment
@@ -42,7 +43,22 @@ conda activate cryoem-annotation
 pip install -e .
 ```
 
-**Note**: The `environment.yml` includes PyTorch, OpenCV, and all other dependencies. SAM is installed via pip within the conda environment.
+**GPU support (faster, requires NVIDIA GPU with CUDA):**
+```bash
+# Create conda environment with GPU support
+conda env create -f environment-gpu.yml
+
+# Activate the environment
+conda activate cryoem-annotation-gpu
+
+# Install the package in development mode
+pip install -e .
+```
+
+**Note**: 
+- `environment.yml` installs CPU-only PyTorch (works on all systems)
+- `environment-gpu.yml` installs PyTorch with CUDA support (requires NVIDIA GPU)
+- The tool will automatically use GPU if available, otherwise falls back to CPU
 
 ### Option 2: Install from Source (pip)
 

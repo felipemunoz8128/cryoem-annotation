@@ -26,17 +26,38 @@ If you don't have conda installed:
 
 #### Step 2: Create Environment
 
+**Choose CPU or GPU version:**
+
+**CPU-only (works everywhere, slower):**
 ```bash
 # Clone repository
 git clone https://github.com/felipemunoz8128/cryoem-annotation.git
 cd cryoem-annotation
 
-# Create environment from file
+# Create environment from file (CPU version)
 conda env create -f environment.yml
 
 # Activate environment
 conda activate cryoem-annotation
 ```
+
+**GPU support (faster, requires NVIDIA GPU with CUDA 11.8 or 12.1):**
+```bash
+# Clone repository
+git clone https://github.com/felipemunoz8128/cryoem-annotation.git
+cd cryoem-annotation
+
+# Create environment with GPU support
+conda env create -f environment-gpu.yml
+
+# Activate environment
+conda activate cryoem-annotation-gpu
+```
+
+**Note**: The GPU version requires:
+- NVIDIA GPU with CUDA support
+- CUDA 11.8 or 12.1 installed on your system
+- If you have a different CUDA version, edit `environment-gpu.yml` and change `pytorch-cuda=11.8` to match your CUDA version
 
 #### Step 3: Install Package
 
@@ -118,9 +139,18 @@ python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 
 ### Install PyTorch with CUDA (Conda)
 
+**Option A: Use GPU environment file (recommended)**
+```bash
+# Use environment-gpu.yml which includes GPU support
+conda env create -f environment-gpu.yml
+conda activate cryoem-annotation-gpu
+```
+
+**Option B: Add GPU support to existing CPU environment**
 ```bash
 conda activate cryoem-annotation
 conda install pytorch torchvision pytorch-cuda=11.8 -c pytorch -c nvidia
+# For CUDA 12.1, use: pytorch-cuda=12.1
 ```
 
 ### Install PyTorch with CUDA (pip)
