@@ -192,8 +192,6 @@ class RealTimeClickCollector:
         try:
             # Optimize figure for performance
             self.fig, self.ax = plt.subplots(figsize=(12, 12))
-            # Disable autoscaling for better performance
-            self.ax.set_autoscale_on(False)
         except Exception as e:
             if "macOS" in str(e) or "2600" in str(e) or "1600" in str(e):
                 print(f"\n  ✗ ERROR: Backend version check failed: {e}")
@@ -204,6 +202,8 @@ class RealTimeClickCollector:
         
         # Display base image (keep default interpolation for quality)
         self.base_image = self.ax.imshow(self.image, cmap='gray')
+        # Disable autoscaling AFTER image is displayed (for better performance)
+        self.ax.set_autoscale_on(False)
         self._update_title()
         self.ax.axis('off')
         
