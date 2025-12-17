@@ -202,8 +202,8 @@ class RealTimeClickCollector:
             else:
                 raise
         
-        # Display base image (optimized: use nearest neighbor for faster rendering)
-        self.base_image = self.ax.imshow(self.image, cmap='gray', interpolation='nearest')
+        # Display base image (keep default interpolation for quality)
+        self.base_image = self.ax.imshow(self.image, cmap='gray')
         self._update_title()
         self.ax.axis('off')
         
