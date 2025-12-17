@@ -209,8 +209,7 @@ extract_results(
 - **MRC files**: Native cryo-EM format (`.mrc`)
 - **Image files**: `.tif`, `.tiff`, `.png`, `.jpg`, `.jpeg`
 
-## Citation
+## Acknowledgements
 
-If you use this tool in your research, please cite:
-
+- Built using [Segment Anything Model (SAM)](https://github.com/facebookresearch/segment-anything) by Meta AI Research
 - Segment Anything Model: [Kirillov et al., 2023](https://arxiv.org/abs/2304.02643)
