@@ -1,6 +1,6 @@
 # Cryo-EM Annotation Tool
 
-Interactive annotation and analysis tool for cryo-electron microscopy micrographs using Facebook's Segment Anything Model (SAM).
+Interactive annotation tool for engineered virus-like particles (eVLPs) in cryo-electron microscopy micrographs using Segment Anything Model (SAM).
 
 ## Features
 
@@ -13,19 +13,15 @@ Interactive annotation and analysis tool for cryo-electron microscopy micrograph
 
 ## Installation
 
-> **📖 For detailed installation instructions, see [INSTALLATION.md](INSTALLATION.md)**
-
 ### Prerequisites
 
-1. **Python 3.8+** (or use conda)
+1. **Conda** (Miniconda or Anaconda)
 2. **SAM Checkpoint**: Download a SAM checkpoint file:
    - [ViT-B (smallest, recommended)](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth) (~350MB)
    - [ViT-L](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth) (~1.2GB)
    - [ViT-H](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth) (~2.4GB)
 
-### Option 1: Conda Installation (Recommended)
-
-The easiest way to install with all dependencies isolated:
+### Install with Conda
 
 **CPU-only (works everywhere):**
 ```bash
@@ -45,6 +41,10 @@ pip install -e .
 
 **GPU support (faster, requires NVIDIA GPU with CUDA):**
 ```bash
+# Clone the repository
+git clone https://github.com/felipemunoz8128/cryoem-annotation.git
+cd cryoem-annotation
+
 # Create conda environment with GPU support
 conda env create -f environment-gpu.yml
 
@@ -57,52 +57,8 @@ pip install -e .
 
 **Note**: 
 - `environment.yml` installs CPU-only PyTorch (works on all systems)
-- `environment-gpu.yml` installs PyTorch with CUDA support (requires NVIDIA GPU)
+- `environment-gpu.yml` installs PyTorch with CUDA support (requires NVIDIA GPU with CUDA 11.8 or 12.1)
 - The tool will automatically use GPU if available, otherwise falls back to CPU
-
-### Option 2: Install from Source (pip)
-
-```bash
-# Clone the repository
-git clone https://github.com/felipemunoz8128/cryoem-annotation.git
-cd cryoem-annotation
-
-# Create a virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install the package
-pip install -e .
-
-# Install Segment Anything Model
-pip install git+https://github.com/facebookresearch/segment-anything.git
-```
-
-### Option 3: Install Dependencies Only
-
-```bash
-pip install -r requirements.txt
-pip install git+https://github.com/facebookresearch/segment-anything.git
-```
-
-### GPU Support (Optional but Recommended)
-
-For GPU acceleration, install PyTorch with CUDA support:
-
-**With Conda:**
-```bash
-conda activate cryoem-annotation
-conda install pytorch torchvision pytorch-cuda=11.8 -c pytorch -c nvidia
-```
-
-**With pip:**
-```bash
-# For CUDA 11.8
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-
-# For CUDA 12.1
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-```
 
 ## Quick Start
 
@@ -253,60 +209,8 @@ extract_results(
 - **MRC files**: Native cryo-EM format (`.mrc`)
 - **Image files**: `.tif`, `.tiff`, `.png`, `.jpg`, `.jpeg`
 
-## GPU Support
-
-The tool automatically detects and uses CUDA if available. To force CPU mode:
-
-```bash
-cryoem-annotate --device cpu ...
-```
-
-## Troubleshooting
-
-### "No module named 'segment_anything'"
-Install SAM: `pip install git+https://github.com/facebookresearch/segment-anything.git`
-
-### "Checkpoint not found"
-Download a SAM checkpoint and specify the path with `--checkpoint`
-
-### GUI/Backend Issues
-On Linux clusters, you may need X11 forwarding:
-```bash
-ssh -X username@cluster
-```
-
-The tool has a fallback mode that uses console input if the GUI backend fails.
-
-### CUDA/GPU Issues
-Check CUDA availability:
-```python
-python -c "import torch; print(torch.cuda.is_available())"
-```
-
-Install PyTorch with CUDA support:
-```bash
-# For CUDA 11.8
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-
-# For CUDA 12.1
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-```
-
 ## Citation
 
 If you use this tool in your research, please cite:
 
 - Segment Anything Model: [Kirillov et al., 2023](https://arxiv.org/abs/2304.02643)
-
-## License
-
-MIT License
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Acknowledgments
-
-- Built using [Segment Anything Model (SAM)](https://github.com/facebookresearch/segment-anything) by Meta AI Research
-
