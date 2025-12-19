@@ -1,11 +1,53 @@
 """Click collection with real-time SAM segmentation."""
 
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
 from cryoem_annotation.core.colors import generate_label_colors
+
+
+def create_bounded_overlay(mask: np.ndarray, color: list) -> Tuple[Optional[np.ndarray], Optional[list]]:
+    """Create overlay only for mask bounding box region.
+
+    This is an optimized approach that creates a small RGBA array covering
+    only the mask's bounding box instead of the full image. For typical
+    cryo-EM masks (~1-5% coverage), this reduces memory by 90%+.
+
+    Args:
+        mask: Boolean mask array
+        color: RGBA color list [r, g, b, a]
+
+    Returns:
+        tuple: (overlay_array, extent) for ax.imshow(), or (None, None) if empty
+    """
+    # Find bounding box of non-zero pixels
+    rows = np.any(mask, axis=1)
+    cols = np.any(mask, axis=0)
+
+    if not np.any(rows) or not np.any(cols):
+        return None, None
+
+    rmin, rmax = np.where(rows)[0][[0, -1]]
+    cmin, cmax = np.where(cols)[0][[0, -1]]
+
+    # Add small padding for cleaner edges
+    pad = 2
+    rmin = max(0, rmin - pad)
+    rmax = min(mask.shape[0] - 1, rmax + pad)
+    cmin = max(0, cmin - pad)
+    cmax = min(mask.shape[1] - 1, cmax + pad)
+
+    # Create overlay only for the bounding box region
+    cropped_mask = mask[rmin:rmax+1, cmin:cmax+1]
+    overlay = np.zeros((*cropped_mask.shape, 4), dtype=np.float32)
+    overlay[cropped_mask] = color
+
+    # Extent for matplotlib imshow: [left, right, bottom, top]
+    extent = [cmin, cmax+1, rmax+1, rmin]
+
+    return overlay, extent
 
 # Configure matplotlib backend for interactivity
 _backend_set = False
@@ -54,8 +96,12 @@ class RealTimeClickCollector:
         # Store clicks and their corresponding segmentations
         self.clicks = []  # List of (x, y) tuples
         self.segmentations = []  # List of dicts with mask, score, etc.
-        self.mask_overlays = []  # List of mask overlay artists for removal
-        
+
+        # Track individual matplotlib artists for efficient undo
+        self.mask_overlays = []  # List of mask overlay artists
+        self.click_markers = []  # List of click marker artists
+        self.click_texts = []  # List of click text artists
+
         # Color palette for masks
         base_colors = generate_label_colors(50)
         self.colors = [[*rgb, 1.0] for rgb in base_colors]  # Add alpha channel
@@ -110,19 +156,24 @@ class RealTimeClickCollector:
             }
             self.segmentations.append(seg_data)
             
-            # Visual feedback: draw click marker
-            self.ax.plot(x, y, 'r+', markersize=15, markeredgewidth=2, zorder=10)
-            self.ax.text(x + 5, y - 5, f"{len(self.clicks)}", 
-                        color='red', fontsize=12, fontweight='bold',
-                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
-                        zorder=11)
-            
-            # Add mask overlay (optimized: only create overlay for mask region)
+            # Visual feedback: draw click marker (track for efficient undo)
+            marker = self.ax.plot(x, y, 'r+', markersize=15, markeredgewidth=2, zorder=10)[0]
+            self.click_markers.append(marker)
+
+            text = self.ax.text(x + 5, y - 5, f"{len(self.clicks)}",
+                               color='red', fontsize=12, fontweight='bold',
+                               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
+                               zorder=11)
+            self.click_texts.append(text)
+
+            # Add mask overlay using bounded approach (90%+ memory reduction)
             color = self.colors[(len(self.segmentations) - 1) % len(self.colors)]
-            mask_overlay = np.zeros((*best_mask.shape, 4), dtype=np.float32)
-            mask_overlay[best_mask] = [*color[:3], 0.4]  # Semi-transparent overlay
-            im = self.ax.imshow(mask_overlay, zorder=5, interpolation='nearest')
-            self.mask_overlays.append(im)
+            overlay, extent = create_bounded_overlay(best_mask, [*color[:3], 0.4])
+            if overlay is not None:
+                im = self.ax.imshow(overlay, extent=extent, zorder=5, interpolation='nearest')
+                self.mask_overlays.append(im)
+            else:
+                self.mask_overlays.append(None)  # Keep list aligned
             
             # Update display (use draw_idle for better performance)
             self.fig.canvas.draw_idle()
@@ -134,44 +185,32 @@ class RealTimeClickCollector:
         """Handle keyboard events for undo/delete."""
         if event.key in ['d', 'D', 'u', 'U', 'delete', 'backspace']:
             if len(self.segmentations) > 0:
-                # Remove last segmentation
+                # Remove last segmentation data
                 self.segmentations.pop()
                 self.clicks.pop()
-                
-                # Remove the mask overlay
+
+                # Efficient undo: remove individual artists instead of full redraw
+                # Remove mask overlay
                 if self.mask_overlays:
                     overlay = self.mask_overlays.pop()
-                    overlay.remove()
-                
-                # Redraw the image to remove click markers
-                self.ax.clear()
-                self.ax.imshow(self.image, cmap='gray')
-                self._update_title()
-                self.ax.axis('off')
-                
-                # Clear the list of old artists before repopulating
-                self.mask_overlays = []
-                
-                # Redraw remaining clicks and masks
-                for i, ((cx, cy), seg_data) in enumerate(zip(self.clicks, self.segmentations)):
-                    # Click marker
-                    self.ax.plot(cx, cy, 'r+', markersize=15, markeredgewidth=2, zorder=10)
-                    self.ax.text(cx + 5, cy - 5, f"{i+1}", 
-                                color='red', fontsize=12, fontweight='bold',
-                                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
-                                zorder=11)
-                    
-                    # Mask overlay (optimized)
-                    color = self.colors[i % len(self.colors)]
-                    mask = seg_data['mask']
-                    mask_overlay = np.zeros((*mask.shape, 4), dtype=np.float32)
-                    mask_overlay[mask] = [*color[:3], 0.4]
-                    im = self.ax.imshow(mask_overlay, zorder=5, interpolation='nearest')
-                    self.mask_overlays.append(im)
-                
+                    if overlay is not None:
+                        overlay.remove()
+
+                # Remove click marker
+                if self.click_markers:
+                    marker = self.click_markers.pop()
+                    marker.remove()
+
+                # Remove click text
+                if self.click_texts:
+                    text = self.click_texts.pop()
+                    text.remove()
+
+                # Efficient redraw - only affected region
                 self.fig.canvas.draw_idle()
                 self.fig.canvas.flush_events()
-                print(f"  ✓ Undone last segmentation. Remaining: {len(self.segmentations)}")
+
+                print(f"  Undone last segmentation. Remaining: {len(self.segmentations)}")
             else:
                 print("  No segmentations to undo.")
     

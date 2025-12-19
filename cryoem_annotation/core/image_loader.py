@@ -59,24 +59,29 @@ def load_micrograph(file_path: Path) -> Optional[np.ndarray]:
 def get_image_files(folder: Path, extensions: Optional[set] = None) -> List[Path]:
     """
     Get all image files from folder, excluding hidden files.
-    
+
+    Uses a single directory pass with case-insensitive extension matching
+    for better performance than multiple glob calls.
+
     Args:
         folder: Directory to search for image files
         extensions: Set of file extensions to search for (default: IMAGE_EXTENSIONS)
-    
+
     Returns:
         Sorted list of image file paths
     """
     if extensions is None:
         extensions = IMAGE_EXTENSIONS
-    
+
+    # Single pass with case-insensitive matching (more efficient than multiple globs)
     files = []
-    for ext in extensions:
-        files.extend(folder.glob(f"*{ext}"))
-        files.extend(folder.glob(f"*{ext.upper()}"))
-    
-    # Filter out hidden files (macOS resource forks, etc.)
-    files = [f for f in files if not f.name.startswith('.')]
-    
+    for item in folder.iterdir():
+        # Skip hidden files and directories
+        if item.name.startswith('.'):
+            continue
+        # Check if it's a file with a matching extension
+        if item.is_file() and item.suffix.lower() in extensions:
+            files.append(item)
+
     return sorted(files)
 
