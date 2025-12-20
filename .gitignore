@@ -62,3 +62,6 @@ htmlcov/
 config.yaml
 .env
 
+# Claude Code
+.claude/
+

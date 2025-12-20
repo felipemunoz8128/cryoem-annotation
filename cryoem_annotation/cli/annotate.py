@@ -21,8 +21,11 @@ from cryoem_annotation.config import load_config
               help='Path to config file')
 @click.option('--device', type=click.Choice(['cuda', 'cpu', 'auto']),
               default='auto', help='Device to use')
+@click.option('--pixel-size', '-p', type=float, default=None,
+              help='Pixel size in nm/pixel (overrides MRC header value)')
 def main(micrographs: Optional[Path], checkpoint: Optional[Path],
-         model_type: str, output: Path, config: Optional[Path], device: str):
+         model_type: str, output: Path, config: Optional[Path], device: str,
+         pixel_size: Optional[float]):
     """
     Interactive annotation tool for cryo-EM micrographs using SAM.
     
@@ -55,6 +58,7 @@ def main(micrographs: Optional[Path], checkpoint: Optional[Path],
         output_folder=output,
         model_type=model_type,
         device=device_str,
+        pixel_size_nm=pixel_size,
     )
 
 

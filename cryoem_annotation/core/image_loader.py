@@ -1,7 +1,7 @@
 """Image loading utilities for micrographs."""
 
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import numpy as np
 import cv2
 
@@ -19,17 +19,17 @@ IMAGE_EXTENSIONS = {'.mrc', '.tif', '.tiff', '.png', '.jpg', '.jpeg'}
 def load_micrograph(file_path: Path) -> Optional[np.ndarray]:
     """
     Load micrograph from MRC or image file.
-    
+
     Args:
         file_path: Path to the micrograph file
-    
+
     Returns:
         Loaded image as numpy array, or None if loading failed
     """
     if not file_path.exists():
         print(f"File not found: {file_path}")
         return None
-    
+
     # Try MRC file first
     if file_path.suffix.lower() == '.mrc' and MRC_AVAILABLE:
         try:
@@ -42,7 +42,7 @@ def load_micrograph(file_path: Path) -> Optional[np.ndarray]:
         except Exception as e:
             print(f"Error reading MRC file: {e}")
             return None
-    
+
     # Try regular image file
     try:
         img = cv2.imread(str(file_path))
@@ -52,8 +52,62 @@ def load_micrograph(file_path: Path) -> Optional[np.ndarray]:
     except Exception as e:
         print(f"Error reading image file: {e}")
         return None
-    
+
     return None
+
+
+def load_micrograph_with_pixel_size(file_path: Path) -> Tuple[Optional[np.ndarray], Optional[float]]:
+    """
+    Load micrograph and extract pixel size from MRC header if available.
+
+    Args:
+        file_path: Path to the micrograph file
+
+    Returns:
+        Tuple of (image_data, pixel_size_nm) where pixel_size_nm is None
+        if not available or not an MRC file
+    """
+    if not file_path.exists():
+        print(f"File not found: {file_path}")
+        return None, None
+
+    pixel_size_nm = None
+
+    # Try MRC file first
+    if file_path.suffix.lower() == '.mrc' and MRC_AVAILABLE:
+        try:
+            with mrcfile.open(file_path, mode='r') as mrc:
+                data = mrc.data
+                # Handle 3D volumes
+                if len(data.shape) == 3:
+                    data = data[0]  # Take first slice
+
+                # Extract voxel size from header (in Angstroms)
+                # mrcfile returns voxel_size as a recarray with x, y, z
+                voxel_size = mrc.voxel_size
+                if voxel_size is not None:
+                    # Use x dimension (typically same as y for 2D micrographs)
+                    pixel_size_angstrom = float(voxel_size['x'])
+                    if pixel_size_angstrom > 0:
+                        # Convert Angstroms to nanometers (1 nm = 10 Angstroms)
+                        pixel_size_nm = pixel_size_angstrom / 10.0
+
+                return data, pixel_size_nm
+        except Exception as e:
+            print(f"Error reading MRC file: {e}")
+            return None, None
+
+    # Try regular image file (no pixel size info available)
+    try:
+        img = cv2.imread(str(file_path))
+        if img is not None:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            return img, None
+    except Exception as e:
+        print(f"Error reading image file: {e}")
+        return None, None
+
+    return None, None
 
 
 def get_image_files(folder: Path, extensions: Optional[set] = None) -> List[Path]:

@@ -114,10 +114,10 @@ class RealTimeClickCollector:
         # Right click or middle click to finish
         if event.button == 3 or event.button == 2:
             self.finished = True
-            print(f"\n  ✓ Right-click detected. Finished with {len(self.clicks)} segmentation(s).")
+            print(f"\n  [OK] Right-click detected. Finished with {len(self.clicks)} segmentation(s).")
             try:
                 plt.close(self.fig)
-            except:
+            except Exception:
                 pass
             return
         
@@ -142,7 +142,7 @@ class RealTimeClickCollector:
             best_mask = masks[best_mask_idx]
             best_score = scores[best_mask_idx]
             
-            print(f"    ✓ Segmentation created (score: {best_score:.3f})")
+            print(f"    [OK] Segmentation created (score: {best_score:.3f})")
             
             # Store the click and segmentation
             self.clicks.append((x, y))
@@ -151,7 +151,6 @@ class RealTimeClickCollector:
                 'click_coords': [int(x), int(y)],
                 'mask': best_mask,
                 'mask_score': float(best_score),
-                'all_scores': [float(s) for s in scores],
                 'mask_area': int(np.sum(best_mask)),
             }
             self.segmentations.append(seg_data)
@@ -179,7 +178,7 @@ class RealTimeClickCollector:
             self.fig.canvas.draw_idle()
             self.fig.canvas.flush_events()
             
-            print(f"  → Total segmentations: {len(self.segmentations)}")
+            print(f"  -> Total segmentations: {len(self.segmentations)}")
     
     def on_key(self, event):
         """Handle keyboard events for undo/delete."""
@@ -233,7 +232,7 @@ class RealTimeClickCollector:
             self.fig, self.ax = plt.subplots(figsize=(12, 12))
         except Exception as e:
             if "macOS" in str(e) or "2600" in str(e) or "1600" in str(e):
-                print(f"\n  ✗ ERROR: Backend version check failed: {e}")
+                print(f"\n  [ERROR] Backend version check failed: {e}")
                 print("  Falling back to coordinate input method...")
                 return self._collect_clicks_fallback()
             else:
@@ -263,11 +262,11 @@ class RealTimeClickCollector:
             plt.show(block=True)
         except Exception as e:
             if "macOS" in str(e) or "2600" in str(e) or "1600" in str(e):
-                print(f"\n  ✗ ERROR: Could not display figure: {e}")
+                print(f"\n  [ERROR] Could not display figure: {e}")
                 print("  Falling back to coordinate input method...")
                 try:
                     plt.close(self.fig)
-                except:
+                except Exception:
                     pass
                 return self._collect_clicks_fallback()
             else:
@@ -277,7 +276,7 @@ class RealTimeClickCollector:
         try:
             self.fig.canvas.mpl_disconnect(cid_click)
             self.fig.canvas.mpl_disconnect(cid_key)
-        except:
+        except Exception:
             pass
         
         print(f"  Final segmentation count: {len(self.segmentations)}")
@@ -310,7 +309,7 @@ class RealTimeClickCollector:
                 x, y = map(int, coord_input.split(','))
                 if 0 <= x < w and 0 <= y < h:
                     clicks.append((x, y))
-                    print(f"    ✓ Added click {len(clicks)}: ({x}, {y})")
+                    print(f"    [OK] Added click {len(clicks)}: ({x}, {y})")
                     
                     # Run SAM prediction
                     point_coords = np.array([[x, y]])
@@ -329,15 +328,14 @@ class RealTimeClickCollector:
                         'click_coords': [int(x), int(y)],
                         'mask': best_mask,
                         'mask_score': float(best_score),
-                        'all_scores': [float(s) for s in scores],
                         'mask_area': int(np.sum(best_mask)),
                     }
                     segmentations.append(seg_data)
-                    print(f"    ✓ Segmentation created (score: {best_score:.3f})")
+                    print(f"    [OK] Segmentation created (score: {best_score:.3f})")
                 else:
-                    print(f"    ✗ Coordinates out of range. Image is {w}x{h}")
+                    print(f"    [ERROR] Coordinates out of range. Image is {w}x{h}")
             except ValueError:
-                print("    ✗ Invalid format. Use: x,y (e.g., 100,200)")
+                print("    [ERROR] Invalid format. Use: x,y (e.g., 100,200)")
             except (EOFError, KeyboardInterrupt):
                 print("\n  Interrupted.")
                 break

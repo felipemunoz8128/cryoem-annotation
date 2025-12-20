@@ -8,6 +8,7 @@ import cv2
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
+from tqdm import tqdm
 
 from cryoem_annotation.core.image_loader import load_micrograph, get_image_files
 from cryoem_annotation.core.image_processing import normalize_image
@@ -239,7 +240,7 @@ class SegmentationLabeler:
             print(f"\n  [OK] Right-click detected. Finished labeling.")
             try:
                 plt.close(self.fig)
-            except:
+            except Exception:
                 pass
             return
         
@@ -316,7 +317,7 @@ class SegmentationLabeler:
                 print("  Falling back to console input method...")
                 try:
                     plt.close(self.fig)
-                except:
+                except Exception:
                     pass
                 return self._label_fallback()
             else:
@@ -325,7 +326,7 @@ class SegmentationLabeler:
         try:
             self.fig.canvas.mpl_disconnect(cid_click)
             self.fig.canvas.mpl_disconnect(cid_key)
-        except:
+        except Exception:
             pass
         
         labeled_count = sum(1 for s in self.segmentations if s.get('label') is not None)
@@ -362,7 +363,7 @@ class SegmentationLabeler:
                 else:
                     print("    [ERROR] Invalid format. Use: seg_num,label (e.g., 1,2)")
             except ValueError:
-                print("    ✗ Invalid format. Use: seg_num,label (e.g., 1,2)")
+                print("    [ERROR] Invalid format. Use: seg_num,label (e.g., 1,2)")
             except (EOFError, KeyboardInterrupt):
                 print("\n  Interrupted.")
                 break
@@ -437,9 +438,9 @@ def label_segmentations(
     
     print(f"\nFound {len(annotated_files)} micrograph(s) with segmentations\n")
     print("=" * 60)
-    
-    # Process each file
-    for idx, file_path in enumerate(annotated_files):
+
+    # Process each file with progress bar
+    for idx, file_path in enumerate(tqdm(annotated_files, desc="Labeling", unit="file")):
         print(f"\n[{idx+1}/{len(annotated_files)}] Labeling: {file_path.name}")
         print("-" * 60)
         

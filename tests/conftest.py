@@ -94,7 +94,6 @@ def sample_segmentation_data(sample_binary_mask) -> Dict[str, Any]:
         'click_coords': (512, 512),
         'mask': sample_binary_mask,
         'mask_score': 0.95,
-        'all_scores': [0.95, 0.85, 0.75],
         'mask_area': int(np.sum(sample_binary_mask)),
         'label': None
     }
@@ -111,7 +110,6 @@ def sample_segmentations(multiple_masks) -> List[Dict[str, Any]]:
             'click_coords': (cx, cy),
             'mask': mask,
             'mask_score': 0.9 - (i * 0.05),
-            'all_scores': [0.9 - (i * 0.05), 0.8, 0.7],
             'mask_area': int(np.sum(mask)),
             'label': i if i < 3 else None  # Some labeled, some not
         })
@@ -161,7 +159,6 @@ def temp_metadata_file(temp_output_dir, sample_segmentations):
                 'click_index': s['click_index'],
                 'click_coords': list(s['click_coords']),
                 'mask_score': s['mask_score'],
-                'all_scores': s['all_scores'],
                 'mask_area': s['mask_area'],
                 'label': s['label'],
                 'mask_file': f"mask_{s['click_index']:03d}_binary.png"

@@ -7,9 +7,10 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import torch
+from tqdm import tqdm
 
 from cryoem_annotation.core.sam_model import SAMModel
-from cryoem_annotation.core.image_loader import load_micrograph, get_image_files
+from cryoem_annotation.core.image_loader import load_micrograph_with_pixel_size, get_image_files
 from cryoem_annotation.core.image_processing import normalize_image
 from cryoem_annotation.core.colors import generate_label_colors
 from cryoem_annotation.annotation.click_collector import RealTimeClickCollector, create_bounded_overlay
@@ -23,16 +24,18 @@ def annotate_micrographs(
     output_folder: Path,
     model_type: str = "vit_b",
     device: Optional[str] = None,
+    pixel_size_nm: Optional[float] = None,
 ) -> None:
     """
     Annotate micrographs using SAM segmentation.
-    
+
     Args:
         micrograph_folder: Path to folder containing micrographs
         checkpoint_path: Path to SAM checkpoint file
         output_folder: Path to output folder for results
         model_type: SAM model type ("vit_b", "vit_l", or "vit_h")
         device: Device to use ("cuda", "cpu", or None for auto-detect)
+        pixel_size_nm: Pixel size in nm/pixel (overrides MRC header if provided)
     """
     print("=" * 60)
     print("Interactive Micrograph Annotation Tool - REAL-TIME VERSION")
@@ -43,10 +46,12 @@ def annotate_micrographs(
     print(f"Output folder: {output_folder}")
     print("=" * 60)
     
-    # Load SAM model
+    # Load SAM model (can take 10-30 seconds)
     print(f"\nLoading SAM model: {model_type} from {checkpoint_path}")
+    print("  (This may take a moment...)")
     sam_model = SAMModel(model_type, checkpoint_path, device)
     predictor = sam_model.get_predictor()
+    print("  Model loaded successfully.")
     
     # Get all image files
     image_files = get_image_files(micrograph_folder)
@@ -64,16 +69,21 @@ def annotate_micrographs(
     # Results storage
     all_results = []
     
-    # Process each file
-    for idx, file_path in enumerate(image_files):
+    # Process each file with progress bar
+    for idx, file_path in enumerate(tqdm(image_files, desc="Micrographs", unit="file")):
         print(f"\n[{idx+1}/{len(image_files)}] Processing: {file_path.name}")
         print("-" * 60)
-        
-        # Load micrograph
-        micrograph = load_micrograph(file_path)
+
+        # Load micrograph with pixel size from MRC header
+        micrograph, mrc_pixel_size = load_micrograph_with_pixel_size(file_path)
         if micrograph is None:
-            print(f"  ✗ Failed to load {file_path.name}, skipping...")
+            print(f"  [ERROR] Failed to load {file_path.name}, skipping...")
             continue
+
+        # Use CLI override if provided, otherwise use MRC header value
+        effective_pixel_size = pixel_size_nm if pixel_size_nm is not None else mrc_pixel_size
+        if effective_pixel_size is not None:
+            print(f"  Pixel size: {effective_pixel_size:.4f} nm/pixel")
         
         # Normalize for display
         micrograph_display = normalize_image(micrograph)
@@ -101,7 +111,7 @@ def annotate_micrographs(
             print("  No clicks recorded, skipping...")
             continue
         
-        print(f"  ✓ Recorded {len(clicks)} segmentation(s)")
+        print(f"  [OK] Recorded {len(clicks)} segmentation(s)")
         
         # Create output directory for this image
         image_output_dir = output_folder / file_path.stem
@@ -120,7 +130,6 @@ def annotate_micrographs(
                 'click_index': seg_data['click_index'],
                 'click_coords': seg_data['click_coords'],
                 'mask_score': seg_data['mask_score'],
-                'all_scores': seg_data['all_scores'],
                 'mask_area': seg_data['mask_area'],
             }
             seg_data_list.append(seg_json)
@@ -137,6 +146,7 @@ def annotate_micrographs(
             'image_shape': list(micrograph_rgb.shape[:2]),
             'num_clicks': len(clicks),
             'timestamp': datetime.now().isoformat(),
+            'pixel_size_nm': effective_pixel_size,
             'segmentations': seg_data_list,
         }
         
@@ -155,7 +165,7 @@ def annotate_micrographs(
             image_output_dir / "overview.png"
         )
         
-        print(f"  ✓ Saved results to {image_output_dir}")
+        print(f"  [OK] Saved results to {image_output_dir}")
         
         # Clear VRAM if using CUDA
         if device == "cuda" or (device is None and torch.cuda.is_available()):
@@ -166,7 +176,7 @@ def annotate_micrographs(
     save_combined_results(all_results, combined_output)
     
     print("\n" + "=" * 60)
-    print(f"✓ Annotation complete!")
+    print(f"[OK] Annotation complete!")
     print(f"  Processed {len(all_results)} micrograph(s)")
     print(f"  Total segmentations: {sum(r['num_clicks'] for r in all_results)}")
     print(f"  Results saved to: {output_folder}")
@@ -182,38 +192,37 @@ def _save_overview_image(
     filename: str,
     output_path: Path,
 ) -> None:
-    """Save overview visualization image."""
-    fig, axes = plt.subplots(1, 2, figsize=(16, 8))
-    
-    # Original with clicks
-    axes[0].imshow(micrograph_display, cmap='gray')
-    for i, (x, y) in enumerate(clicks):
-        axes[0].plot(x, y, 'r+', markersize=15, markeredgewidth=2)
-        axes[0].text(x + 5, y - 5, f"{i+1}", 
-                    color='red', fontsize=12, fontweight='bold',
-                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
-    axes[0].set_title(f"Original: {filename}\n{len(clicks)} segmentation(s)")
-    axes[0].axis('off')
-    
-    # With segmentations overlaid
-    axes[1].imshow(micrograph_display, cmap='gray')
+    """Save overview visualization image with clicks and segmentations combined."""
+    fig, ax = plt.subplots(figsize=(12, 12))
+
+    # Display base image
+    ax.imshow(micrograph_display, cmap='gray')
+
+    # Generate colors for segmentations
     colors = generate_label_colors(len(all_masks))
-    
+
+    # Overlay segmentation masks with click markers
     for i, (mask, seg_data) in enumerate(zip(all_masks, segmentations)):
         x, y = seg_data['click_coords']
+
         # Overlay mask using bounded approach (90%+ memory reduction)
         color = colors[i % len(colors)]
         overlay, extent = create_bounded_overlay(mask, [*color[:3], 0.4])
         if overlay is not None:
-            axes[1].imshow(overlay, extent=extent)
-        # Mark click point
-        axes[1].plot(x, y, 'w+', markersize=12, markeredgewidth=2)
-        axes[1].text(x + 5, y - 5, f"{i+1}",
-                    color='white', fontsize=10, fontweight='bold',
-                    bbox=dict(boxstyle='round', facecolor='black', alpha=0.6))
-    axes[1].set_title(f"Segmentations: {len(segmentations)} objects")
-    axes[1].axis('off')
-    
+            ax.imshow(overlay, extent=extent)
+
+        # Mark click point with red cross
+        ax.plot(x, y, 'r+', markersize=15, markeredgewidth=2)
+
+        # Add numbered label
+        ax.text(x + 8, y - 8, f"{i+1}",
+                color='white', fontsize=11, fontweight='bold',
+                bbox=dict(boxstyle='round', facecolor=color, edgecolor='white',
+                         alpha=0.85, linewidth=1))
+
+    ax.set_title(f"{filename}\n{len(segmentations)} segmentation(s)", fontsize=14)
+    ax.axis('off')
+
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     plt.close()
