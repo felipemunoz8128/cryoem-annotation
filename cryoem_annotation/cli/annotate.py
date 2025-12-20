@@ -4,7 +4,6 @@ import click
 from pathlib import Path
 from typing import Optional
 
-from cryoem_annotation.annotation.annotator import annotate_micrographs
 from cryoem_annotation.config import load_config
 
 
@@ -47,7 +46,10 @@ def main(micrographs: Optional[Path], checkpoint: Optional[Path],
     
     # Handle device
     device_str = None if device == 'auto' else device
-    
+
+    # Lazy import to speed up CLI startup
+    from cryoem_annotation.annotation.annotator import annotate_micrographs
+
     # Run annotation
     annotate_micrographs(
         micrograph_folder=micrograph_folder,

@@ -4,7 +4,6 @@ import click
 from pathlib import Path
 from typing import Optional
 
-from cryoem_annotation.labeling.labeler import label_segmentations
 from cryoem_annotation.config import load_config
 
 
@@ -31,7 +30,10 @@ def main(results: Path, micrographs: Optional[Path], config: Optional[Path]):
     if micrograph_folder is None:
         click.echo("Error: --micrographs is required or set in config file", err=True)
         return
-    
+
+    # Lazy import to speed up CLI startup
+    from cryoem_annotation.labeling.labeler import label_segmentations
+
     # Run labeling
     label_segmentations(
         results_folder=results,

@@ -4,8 +4,6 @@ import click
 from pathlib import Path
 from typing import Optional
 
-from cryoem_annotation.extraction.extractor import extract_results
-
 
 @click.command()
 @click.option('--results', '-r', type=click.Path(exists=True, path_type=Path),
@@ -28,6 +26,9 @@ def main(results: Path, output: Optional[Path], format: str,
       - *_metadata.csv: Contains segmentation_id, micrograph_name, click_index, etc.
       - *_results.csv: Contains segmentation_id, label, area_pixels, area_nm2
     """
+    # Lazy import to speed up CLI startup
+    from cryoem_annotation.extraction.extractor import extract_results
+
     extract_results(
         results_folder=results,
         output_path=output,
