@@ -49,6 +49,15 @@ class Config:
                     'percentile_range': [1, 99],
                 },
             },
+            'labeling': {
+                'categories': [
+                    {'name': 'mature', 'key': '1'},
+                    {'name': 'immature', 'key': '2'},
+                    {'name': 'indeterminate', 'key': '3'},
+                    {'name': 'other', 'key': '4'},
+                    {'name': 'empty', 'key': '5'},
+                ],
+            },
         }
     
     def load_from_file(self, config_file: Path) -> None:

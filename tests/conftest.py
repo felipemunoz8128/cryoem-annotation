@@ -101,8 +101,9 @@ def sample_segmentation_data(sample_binary_mask) -> Dict[str, Any]:
 
 @pytest.fixture
 def sample_segmentations(multiple_masks) -> List[Dict[str, Any]]:
-    """Generate multiple segmentation data dictionaries."""
+    """Generate multiple segmentation data dictionaries with string labels."""
     centers = [(256, 256), (512, 512), (768, 768), (256, 768), (768, 256)]
+    labels = ['mature', 'immature', 'indeterminate', None, None]  # Some labeled, some not
     segmentations = []
     for i, (mask, (cx, cy)) in enumerate(zip(multiple_masks, centers)):
         segmentations.append({
@@ -111,7 +112,7 @@ def sample_segmentations(multiple_masks) -> List[Dict[str, Any]]:
             'mask': mask,
             'mask_score': 0.9 - (i * 0.05),
             'mask_area': int(np.sum(mask)),
-            'label': i if i < 3 else None  # Some labeled, some not
+            'label': labels[i]
         })
     return segmentations
 
@@ -119,8 +120,9 @@ def sample_segmentations(multiple_masks) -> List[Dict[str, Any]]:
 @pytest.fixture
 def labeled_segmentations(sample_segmentations) -> List[Dict[str, Any]]:
     """Generate segmentations with all labels assigned."""
+    label_names = ['mature', 'immature', 'indeterminate', 'other', 'empty']
     for i, seg in enumerate(sample_segmentations):
-        seg['label'] = i % 3
+        seg['label'] = label_names[i % len(label_names)]
     return sample_segmentations
 
 

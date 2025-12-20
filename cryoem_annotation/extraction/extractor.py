@@ -184,8 +184,14 @@ def print_summary(metadata: List[Dict], results: List[Dict]) -> None:
                 label_counts[label] = label_counts.get(label, 0) + 1
 
         print(f"\nLabel distribution:")
-        for label in sorted(label_counts.keys()):
-            print(f"  Label {label}: {label_counts[label]} object(s)")
+        # Sort labels: strings alphabetically, integers numerically
+        str_labels = sorted([l for l in label_counts.keys() if isinstance(l, str)])
+        int_labels = sorted([l for l in label_counts.keys() if isinstance(l, int)])
+
+        for label in str_labels:
+            print(f"  {label}: {label_counts[label]} object(s)")
+        for label in int_labels:
+            print(f"  Label {label} (legacy): {label_counts[label]} object(s)")
 
     # Area statistics in pixels
     areas_pixels = [d['area_pixels'] for d in results if d['area_pixels'] is not None]

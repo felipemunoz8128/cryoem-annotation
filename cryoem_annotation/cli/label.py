@@ -17,27 +17,35 @@ from cryoem_annotation.config import load_config
 def main(results: Path, micrographs: Optional[Path], config: Optional[Path]):
     """
     Interactive labeling tool for assigning labels to segmentations.
-    
+
     This tool loads previously created segmentations and allows you to assign
-    labels (0-9) to them by clicking on the objects.
+    categorical labels (mature, immature, etc.) by clicking on the objects.
+
+    Default keyboard shortcuts: 1=mature, 2=immature, 3=indeterminate, 4=other, 5=empty
     """
     # Load config
     cfg = load_config(config)
-    
+
     # Get micrograph folder from CLI or config
     micrograph_folder = micrographs or Path(cfg.get('micrograph_folder'))
-    
+
     if micrograph_folder is None:
         click.echo("Error: --micrographs is required or set in config file", err=True)
         return
 
     # Lazy import to speed up CLI startup
     from cryoem_annotation.labeling.labeler import label_segmentations
+    from cryoem_annotation.labeling.categories import LabelCategories
+
+    # Load label categories from config (or use defaults)
+    categories_config = cfg.get('labeling.categories')
+    categories = LabelCategories(categories_config) if categories_config else None
 
     # Run labeling
     label_segmentations(
         results_folder=results,
         micrograph_folder=micrograph_folder,
+        categories=categories,
     )
 
 

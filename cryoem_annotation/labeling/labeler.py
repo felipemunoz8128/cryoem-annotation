@@ -12,9 +12,9 @@ from tqdm import tqdm
 
 from cryoem_annotation.core.image_loader import load_micrograph, get_image_files
 from cryoem_annotation.core.image_processing import normalize_image
-from cryoem_annotation.core.colors import generate_label_colors
 from cryoem_annotation.io.metadata import load_metadata, save_metadata
 from cryoem_annotation.io.masks import load_mask_binary
+from cryoem_annotation.labeling.categories import LabelCategories
 
 # Try to import tkinter for dialog boxes
 try:
@@ -118,7 +118,9 @@ class CachedSegmentationData:
 class SegmentationLabeler:
     """Interactive tool for labeling segmentations."""
 
-    def __init__(self, image: np.ndarray, segmentations: List[Dict], title: str = "Label Segmentations"):
+    def __init__(self, image: np.ndarray, segmentations: List[Dict],
+                 title: str = "Label Segmentations",
+                 categories: Optional[LabelCategories] = None):
         """Initialize labeler."""
         self.image = image
         self.segmentations = segmentations  # Will be modified in place
@@ -127,13 +129,12 @@ class SegmentationLabeler:
         self.ax = None
         self.finished = False
 
-        self.current_label = 1  # Default label is 1
+        # Label categories (use provided or defaults)
+        self.categories = categories or LabelCategories()
+        self.current_label = self.categories.names[0]  # Default to first category
 
         self.contour_patches = []
         self.text_artists = []
-
-        # Color palette for labels
-        self.label_colors = generate_label_colors(10)
 
         # Pre-compute and cache contours/centroids for all segmentations
         # This eliminates redundant cv2.findContours() and cv2.moments() calls on redraws
@@ -147,10 +148,10 @@ class SegmentationLabeler:
         """Update the figure title."""
         title_text = (f"{self.title}\n"
                      f"Active Label: {self.current_label} | "
-                     f"Left-click: Assign label | Right-click: Finish | "
-                     f"'0'-'9': Set Label")
+                     f"Left-click: Assign | Right-click: Finish\n"
+                     f"{self.categories.get_help_text()}")
         if self.ax:
-            self.ax.set_title(title_text, fontsize=14, fontweight='bold')
+            self.ax.set_title(title_text, fontsize=12, fontweight='bold')
     
     def _draw_segmentations(self):
         """Draw all segmentations as outlines with labels.
@@ -182,8 +183,7 @@ class SegmentationLabeler:
                 linewidth = 1.0
                 linestyle = '--'
             else:
-                label_idx = (label - 1) % 10 if label > 0 else 0
-                color = self.label_colors[label_idx]
+                color = self.categories.get_color_for_label(label)
                 linewidth = 1.0
                 linestyle = '-'
 
@@ -198,7 +198,8 @@ class SegmentationLabeler:
                 centroid = cached.centroid
                 if centroid is not None:
                     cx, cy = centroid
-                    text = self.ax.text(cx, cy, f"L{label}",
+                    display_text = self.categories.get_display_text(label)
+                    text = self.ax.text(cx, cy, display_text,
                                        color='white', fontsize=10, fontweight='bold',
                                        ha='center', va='center',
                                        bbox=dict(boxstyle='round', facecolor=color, alpha=0.7),
@@ -261,7 +262,8 @@ class SegmentationLabeler:
             if clicked_seg is not None:
                 old_label = clicked_seg.get('label')
                 clicked_seg['label'] = self.current_label
-                print(f"  [OK] Assigned label {self.current_label} to segmentation {clicked_idx + 1} (was: {old_label})")
+                old_display = self.categories.get_display_text(old_label) if old_label else "None"
+                print(f"  [OK] Assigned '{self.current_label}' to segmentation {clicked_idx + 1} (was: {old_display})")
                 self._draw_segmentations()
                 self.fig.canvas.draw()
             else:
@@ -269,13 +271,12 @@ class SegmentationLabeler:
     
     def on_key(self, event):
         """Handle keyboard events for label selection."""
-        if event.key.isdigit():
-            label_num = int(event.key)
-            if 0 <= label_num <= 9:
-                self.current_label = label_num if label_num > 0 else 10
-                self._update_title()
-                self.fig.canvas.draw()
-                print(f"  -> Active label set to: {self.current_label}")
+        label_name = self.categories.get_label_for_key(event.key)
+        if label_name is not None:
+            self.current_label = label_name
+            self._update_title()
+            self.fig.canvas.draw()
+            print(f"  -> Active label set to: '{self.current_label}'")
     
     def label_segmentations(self) -> List[Dict]:
         """Display image with segmentations and collect labels."""
@@ -302,10 +303,10 @@ class SegmentationLabeler:
         
         print("\n  Figure window opened. Label segmentations by clicking on them.")
         print("  Instructions:")
-        print("    - Press '0'-'9': Set active label (0 = label 10)")
+        print(f"    - {self.categories.get_help_text()}")
         print("    - Left-click: Assign active label to clicked segmentation")
         print("    - Right-click: Finish and proceed to next micrograph")
-        print(f"  Current active label: {self.current_label}")
+        print(f"  Current active label: '{self.current_label}'")
         print(f"  Unlabeled segmentations: {sum(1 for s in self.segmentations if s.get('label') is None)}")
         print()
         
@@ -339,35 +340,40 @@ class SegmentationLabeler:
         print("\n  =========================================")
         print("  FALLBACK MODE: Manual Label Input")
         print("  =========================================")
-        print("  Enter segmentation number and label.")
-        print("  Format: seg_num,label (e.g., 1,2)")
+        print(f"  Available labels: {', '.join(self.categories.names)}")
+        print("  Format: seg_num,label_name (e.g., 1,mature)")
         print("  Press Enter with empty input when done.")
         print("  =========================================\n")
-        
+
         print(f"  {len(self.segmentations)} segmentations to label\n")
-        
+
         while True:
             try:
                 input_str = input("  Enter 'seg_num,label' or press Enter to finish: ").strip()
                 if not input_str:
                     break
-                
+
                 parts = input_str.split(',')
                 if len(parts) == 2:
-                    seg_num, label = map(int, parts)
+                    seg_num = int(parts[0].strip())
+                    label = parts[1].strip().lower()
+
                     if 1 <= seg_num <= len(self.segmentations):
-                        self.segmentations[seg_num - 1]['label'] = label
-                        print(f"    [OK] Labeled segmentation {seg_num} as {label}")
+                        if self.categories.is_valid_label(label):
+                            self.segmentations[seg_num - 1]['label'] = label
+                            print(f"    [OK] Labeled segmentation {seg_num} as '{label}'")
+                        else:
+                            print(f"    [ERROR] Invalid label '{label}'. Use: {', '.join(self.categories.names)}")
                     else:
                         print(f"    [ERROR] Segmentation number out of range (1-{len(self.segmentations)})")
                 else:
-                    print("    [ERROR] Invalid format. Use: seg_num,label (e.g., 1,2)")
+                    print("    [ERROR] Invalid format. Use: seg_num,label (e.g., 1,mature)")
             except ValueError:
-                print("    [ERROR] Invalid format. Use: seg_num,label (e.g., 1,2)")
+                print("    [ERROR] Invalid format. Use: seg_num,label (e.g., 1,mature)")
             except (EOFError, KeyboardInterrupt):
                 print("\n  Interrupted.")
                 break
-        
+
         return self.segmentations
 
 
@@ -407,19 +413,25 @@ def load_segmentations(results_folder: Path, micrograph_name: str) -> Optional[D
 def label_segmentations(
     results_folder: Path,
     micrograph_folder: Path,
+    categories: Optional[LabelCategories] = None,
 ) -> None:
     """
     Label segmentations for all micrographs.
-    
+
     Args:
         results_folder: Path to annotation results folder
         micrograph_folder: Path to micrograph folder
+        categories: Label categories configuration (uses defaults if None)
     """
+    # Use provided categories or defaults
+    if categories is None:
+        categories = LabelCategories()
     print("=" * 60)
     print("Interactive Segmentation Labeling Tool")
     print("=" * 60)
     print(f"Micrograph folder: {micrograph_folder}")
     print(f"Annotation results folder: {results_folder}")
+    print(f"Label categories: {', '.join(categories.names)}")
     print("=" * 60)
     
     # Get micrograph files that have annotations
@@ -466,7 +478,8 @@ def label_segmentations(
         labeler = SegmentationLabeler(
             micrograph_display,
             segmentations,
-            title=file_path.name
+            title=file_path.name,
+            categories=categories,
         )
         
         labeled_segmentations = labeler.label_segmentations()
