@@ -78,7 +78,7 @@ Two separate CSVs for easy analysis:
 
 ### MRC Pixel Size
 
-Pixel size is extracted from MRC headers via `mrcfile.voxel_size` (in Angstroms, converted to nm). CLI `--pixel-size` flag overrides header values.
+Pixel size is automatically extracted from MRC headers via `mrcfile.voxel_size` (in Angstroms, converted to nm) during annotation and stored in metadata. The `cryoem-extract --pixel-size` flag can override this value at extraction time.
 
 ## Code Patterns
 

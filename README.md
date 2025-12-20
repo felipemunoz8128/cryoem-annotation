@@ -7,7 +7,9 @@ Interactive annotation tool for engineered virus-like particles (eVLPs) in cryo-
 - **Interactive Annotation**: Click on objects in micrographs to automatically segment them using SAM
 - **Real-time Segmentation**: See segmentation results immediately as you click
 - **Labeling Tool**: Assign labels (0-9) to segmented objects
-- **Data Extraction**: Export results to CSV or JSON format
+- **Data Extraction**: Export results to CSV or JSON format with split metadata/results files
+- **Pixel Size Support**: Automatic extraction from MRC headers with CLI override option
+- **Physical Units**: Calculate area in nm² when pixel size is available
 - **Support for MRC files**: Native support for cryo-EM MRC file format
 - **GPU/CPU Support**: Automatic GPU detection with CPU fallback
 
@@ -94,9 +96,13 @@ cryoem-label \
 ```bash
 cryoem-extract \
     --results annotation_results \
-    --output results.csv \
+    --output results \
     --format csv
 ```
+
+This creates two CSV files:
+- `results_metadata.csv`: Segmentation IDs, coordinates, and scores
+- `results_results.csv`: Labels and areas (in pixels and nm² if pixel size available)
 
 ## Configuration
 
@@ -134,10 +140,12 @@ Options:
   --micrographs, -m PATH    Path to micrograph folder (required)
   --checkpoint, -c PATH     Path to SAM checkpoint file (required)
   --model-type TEXT         SAM model type: vit_b, vit_l, or vit_h [default: vit_b]
-  --output, -o PATH          Output folder [default: annotation_results]
-  --config PATH              Path to config file
-  --device TEXT              Device: cuda, cpu, or auto [default: auto]
+  --output, -o PATH         Output folder [default: annotation_results]
+  --config PATH             Path to config file
+  --device TEXT             Device: cuda, cpu, or auto [default: auto]
 ```
+
+Note: Pixel size is automatically extracted from MRC file headers when available.
 
 ### `cryoem-label`
 
@@ -153,8 +161,9 @@ Options:
 ```
 Options:
   --results, -r PATH        Path to annotation results folder (required)
-  --output, -o PATH         Output file path (default: results.csv/json)
+  --output, -o PATH         Output file base path (default: results in results folder)
   --format, -f TEXT         Output format: csv, json, or both [default: csv]
+  --pixel-size, -p FLOAT    Pixel size in nm/pixel (overrides stored metadata values)
 ```
 
 ## Output Structure
@@ -167,11 +176,17 @@ annotation_results/
 │   ├── metadata.json          # Annotation metadata
 │   ├── overview.png           # Visualization
 │   ├── mask_001_binary.png    # Binary masks
-│   ├── mask_002_binary.png
 │   └── ...
 ├── micrograph_name_2/
 │   └── ...
 └── all_annotations.json       # Combined results
+```
+
+After extraction:
+
+```
+results_metadata.csv           # Segmentation IDs, coordinates, scores
+results_results.csv            # Labels, area in pixels and nm²
 ```
 
 ## Python API

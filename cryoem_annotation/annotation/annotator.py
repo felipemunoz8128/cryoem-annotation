@@ -24,7 +24,6 @@ def annotate_micrographs(
     output_folder: Path,
     model_type: str = "vit_b",
     device: Optional[str] = None,
-    pixel_size_nm: Optional[float] = None,
 ) -> None:
     """
     Annotate micrographs using SAM segmentation.
@@ -35,7 +34,6 @@ def annotate_micrographs(
         output_folder: Path to output folder for results
         model_type: SAM model type ("vit_b", "vit_l", or "vit_h")
         device: Device to use ("cuda", "cpu", or None for auto-detect)
-        pixel_size_nm: Pixel size in nm/pixel (overrides MRC header if provided)
     """
     print("=" * 60)
     print("Interactive Micrograph Annotation Tool - REAL-TIME VERSION")
@@ -75,15 +73,13 @@ def annotate_micrographs(
         print("-" * 60)
 
         # Load micrograph with pixel size from MRC header
-        micrograph, mrc_pixel_size = load_micrograph_with_pixel_size(file_path)
+        micrograph, pixel_size = load_micrograph_with_pixel_size(file_path)
         if micrograph is None:
             print(f"  [ERROR] Failed to load {file_path.name}, skipping...")
             continue
 
-        # Use CLI override if provided, otherwise use MRC header value
-        effective_pixel_size = pixel_size_nm if pixel_size_nm is not None else mrc_pixel_size
-        if effective_pixel_size is not None:
-            print(f"  Pixel size: {effective_pixel_size:.4f} nm/pixel")
+        if pixel_size is not None:
+            print(f"  Pixel size (from MRC header): {pixel_size:.4f} nm/pixel")
         
         # Normalize for display
         micrograph_display = normalize_image(micrograph)
@@ -146,7 +142,7 @@ def annotate_micrographs(
             'image_shape': list(micrograph_rgb.shape[:2]),
             'num_clicks': len(clicks),
             'timestamp': datetime.now().isoformat(),
-            'pixel_size_nm': effective_pixel_size,
+            'pixel_size_nm': pixel_size,
             'segmentations': seg_data_list,
         }
         
