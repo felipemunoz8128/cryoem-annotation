@@ -102,9 +102,12 @@ A navigation window shows all files with checkmarks for completed ones.
 ```bash
 cryoem-extract \
     --results annotation_results \
+    --micrographs /path/to/micrographs \
     --output results \
     --format csv
 ```
+
+The `--micrographs` flag is optional but recommended for accurate statistics (counts all micrographs including those without segmentations).
 
 This creates two CSV files:
 - `extraction_metadata.csv`: Segmentation IDs, micrograph names, coordinates, scores, and area (pixels)
@@ -167,7 +170,8 @@ Options:
 ```
 Options:
   --results, -r PATH        Path to annotation results folder (required)
-  --output, -o PATH         Output file base path (default: results in results folder)
+  --micrographs, -m PATH    Path to micrograph folder (for accurate total count)
+  --output, -o PATH         Output file base path (default: extraction in results folder)
   --format, -f TEXT         Output format: csv, json, or both [default: csv]
   --pixel-size, -p FLOAT    Pixel size in nm/pixel (overrides stored metadata values)
 ```

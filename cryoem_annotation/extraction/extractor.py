@@ -232,6 +232,7 @@ def print_summary(metadata: List[Dict], results: List[Dict], total_micrographs: 
 
 def extract_results(
     results_folder: Path,
+    micrograph_folder: Optional[Path] = None,
     output_path: Optional[Path] = None,
     output_format: str = "csv",
     pixel_size_override: Optional[float] = None,
@@ -241,14 +242,19 @@ def extract_results(
 
     Args:
         results_folder: Path to annotation results folder
+        micrograph_folder: Path to micrograph folder (for accurate total count)
         output_path: Base path for output files (default: results in results_folder)
         output_format: Output format: "csv", "json", or "both" (default: "csv")
         pixel_size_override: Override pixel size in nm/pixel for all micrographs
     """
+    from cryoem_annotation.core.image_loader import get_image_files
+
     print("=" * 60)
     print("Extract Labels and Areas from Segmentations")
     print("=" * 60)
     print(f"Annotation results folder: {results_folder}")
+    if micrograph_folder is not None:
+        print(f"Micrograph folder: {micrograph_folder}")
     if pixel_size_override is not None:
         print(f"Pixel size override: {pixel_size_override} nm/pixel")
     print("=" * 60)
@@ -258,11 +264,17 @@ def extract_results(
         return
 
     # Extract data
-    metadata, results, total_micrographs = extract_segmentation_data(results_folder, pixel_size_override)
+    metadata, results, annotated_micrographs = extract_segmentation_data(results_folder, pixel_size_override)
 
     if len(metadata) == 0:
         print("\n[ERROR] No segmentation data found.")
         return
+
+    # Get total micrograph count from folder if provided, otherwise use annotated count
+    if micrograph_folder is not None:
+        total_micrographs = len(get_image_files(micrograph_folder))
+    else:
+        total_micrographs = annotated_micrographs
 
     # Print summary
     print_summary(metadata, results, total_micrographs)
