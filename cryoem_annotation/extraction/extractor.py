@@ -198,8 +198,8 @@ def print_summary(metadata: List[Dict], results: List[Dict]) -> None:
         for label in int_labels:
             print(f"  Label {label} (legacy): {label_counts[label]} object(s)")
 
-    # Area statistics in pixels
-    areas_pixels = [d['area_pixels'] for d in results if d['area_pixels'] is not None]
+    # Area statistics in pixels (from metadata)
+    areas_pixels = [d['area_pixels'] for d in metadata if d['area_pixels'] is not None]
     if areas_pixels:
         print(f"\nMask area statistics (pixels):")
         print(f"  Total objects: {len(areas_pixels)}")
