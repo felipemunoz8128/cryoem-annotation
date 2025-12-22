@@ -249,7 +249,7 @@ class RealTimeClickCollector:
         """Update the figure title."""
         if self.navigation_callback:
             title_text = (f"{self.title}\n"
-                         f"Left-click: Segment | Right-click/Arrow: Navigate | "
+                         f"Left-click: Segment | Arrow/Right-click: Navigate | "
                          f"'d': Undo | Esc: Quit")
         else:
             title_text = (f"{self.title}\n"
@@ -456,6 +456,46 @@ class RealTimeClickCollector:
         # Clear data
         self.clicks.clear()
         self.segmentations.clear()
+
+    def load_existing_segmentations(self, segmentations: List[Dict]) -> None:
+        """Load and display existing segmentations.
+
+        Args:
+            segmentations: List of segmentation dicts with 'mask', 'click_coords', etc.
+        """
+        for seg_data in segmentations:
+            mask = seg_data.get('mask')
+            if mask is None:
+                continue
+
+            x, y = seg_data['click_coords']
+            self.clicks.append((x, y))
+            self.segmentations.append(seg_data)
+
+            # Visual feedback: draw click marker
+            marker = self.ax.plot(x, y, 'r+', markersize=15, markeredgewidth=2, zorder=10)[0]
+            self.click_markers.append(marker)
+
+            text = self.ax.text(x + 5, y - 5, f"{len(self.clicks)}",
+                               color='red', fontsize=12, fontweight='bold',
+                               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
+                               zorder=11)
+            self.click_texts.append(text)
+
+            # Add mask overlay
+            color = self.colors[(len(self.segmentations) - 1) % len(self.colors)]
+            overlay, extent = create_bounded_overlay(mask, [*color[:3], 0.4])
+            if overlay is not None:
+                im = self.ax.imshow(overlay, extent=extent, zorder=5, interpolation='nearest')
+                self.mask_overlays.append(im)
+            else:
+                self.mask_overlays.append(None)
+
+        if self.fig:
+            self.fig.canvas.draw_idle()
+            self.fig.canvas.flush_events()
+
+        print(f"  [OK] Loaded {len(segmentations)} existing segmentation(s)")
 
     def close_figure(self) -> None:
         """Close the figure and disconnect event handlers."""

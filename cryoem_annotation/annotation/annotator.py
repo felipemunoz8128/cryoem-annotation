@@ -13,8 +13,8 @@ from cryoem_annotation.core.image_loader import load_micrograph_with_pixel_size,
 from cryoem_annotation.core.image_processing import normalize_image
 from cryoem_annotation.core.colors import generate_label_colors
 from cryoem_annotation.annotation.click_collector import RealTimeClickCollector, create_bounded_overlay
-from cryoem_annotation.io.metadata import save_metadata, save_combined_results
-from cryoem_annotation.io.masks import save_mask_binary
+from cryoem_annotation.io.metadata import load_metadata, save_metadata, save_combined_results
+from cryoem_annotation.io.masks import load_mask_binary, save_mask_binary
 from cryoem_annotation.navigation import NavigationWindow
 
 
@@ -211,12 +211,34 @@ def annotate_micrographs(
         else:
             # Update existing collector with new image
             current_collector.update_image(micrograph_display, micrograph_rgb, file_path.name)
-            # Update predictor reference (it's the same predictor, but image changed)
+
+        # Check for existing annotations and load them
+        existing_dir = output_folder / file_path.stem
+        existing_metadata_file = existing_dir / "metadata.json"
+        if existing_metadata_file.exists():
+            existing_metadata = load_metadata(existing_metadata_file)
+            if existing_metadata and 'segmentations' in existing_metadata:
+                existing_segs = existing_metadata['segmentations']
+                # Load masks for each segmentation
+                segs_with_masks = []
+                for seg in existing_segs:
+                    click_idx = seg['click_index']
+                    mask_file = existing_dir / f"mask_{click_idx:03d}_binary.png"
+                    mask = load_mask_binary(mask_file)
+                    if mask is not None:
+                        seg_copy = dict(seg)
+                        seg_copy['mask'] = mask
+                        segs_with_masks.append(seg_copy)
+                if segs_with_masks:
+                    current_collector.load_existing_segmentations(segs_with_masks)
+                    # Mark as already completed
+                    completed_indices.add(idx)
+                    nav_window.mark_completed(idx)
 
         print("\n  Figure window opened. Click on objects in the image.")
         print("  Instructions:")
         print("    - Left-click: Segment an object (mask appears immediately)")
-        print("    - Right-click or Arrow keys: Navigate between files")
+        print("    - Arrow keys or Right-click: Navigate between files")
         print("    - Press 'd' or 'u': Undo last segmentation")
         print("    - Escape: Finish session")
         print()
@@ -250,10 +272,16 @@ def annotate_micrographs(
                 if action == 'quit':
                     # Save current work before quitting
                     save_current_segmentations()
+                    # Mark as done even if no segmentations
+                    completed_indices.add(nav_state['index'])
+                    nav_window.mark_completed(nav_state['index'])
                     break
 
                 # Save current segmentations before navigating
                 save_current_segmentations()
+                # Mark as done even if no segmentations
+                completed_indices.add(nav_state['index'])
+                nav_window.mark_completed(nav_state['index'])
 
                 # Clear current collector's segmentations for new file
                 if current_collector:
