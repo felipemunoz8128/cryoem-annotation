@@ -46,15 +46,16 @@ class TestExtractSegmentationData:
 
     def test_extracts_all_segmentations(self, sample_results_folder):
         """Test that all segmentations are extracted."""
-        metadata, results = extract_segmentation_data(sample_results_folder)
+        metadata, results, total = extract_segmentation_data(sample_results_folder)
 
         # 2 micrographs x 3 segmentations each = 6 total
         assert len(metadata) == 6
         assert len(results) == 6
+        assert total == 2
 
     def test_creates_unique_segmentation_ids(self, sample_results_folder):
         """Test that segmentation IDs are unique integers."""
-        metadata, _ = extract_segmentation_data(sample_results_folder)
+        metadata, _, _ = extract_segmentation_data(sample_results_folder)
 
         ids = [m["segmentation_id"] for m in metadata]
         assert len(ids) == len(set(ids))
@@ -64,7 +65,7 @@ class TestExtractSegmentationData:
 
     def test_calculates_diameter_nm_when_pixel_size_available(self, sample_results_folder):
         """Test diameter_nm calculation when pixel size is available."""
-        metadata, results = extract_segmentation_data(sample_results_folder)
+        metadata, results, _ = extract_segmentation_data(sample_results_folder)
 
         # Build lookup from segmentation_id to micrograph_name
         id_to_mic = {m["segmentation_id"]: m["micrograph_name"] for m in metadata}
@@ -79,17 +80,18 @@ class TestExtractSegmentationData:
 
     def test_pixel_size_override(self, sample_results_folder):
         """Test that pixel_size_override works."""
-        _, results = extract_segmentation_data(sample_results_folder, pixel_size_override=1.0)
+        _, results, _ = extract_segmentation_data(sample_results_folder, pixel_size_override=1.0)
 
         # All should have diameter_nm calculated
         assert all(r["diameter_nm"] is not None for r in results)
 
     def test_empty_folder(self, temp_output_dir):
         """Test extraction from empty folder."""
-        metadata, results = extract_segmentation_data(temp_output_dir)
+        metadata, results, total = extract_segmentation_data(temp_output_dir)
 
         assert metadata == []
         assert results == []
+        assert total == 0
 
 
 class TestSaveMetadataCsv:

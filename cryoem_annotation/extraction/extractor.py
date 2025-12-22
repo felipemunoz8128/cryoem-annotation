@@ -13,7 +13,7 @@ from cryoem_annotation.io.metadata import load_metadata
 def extract_segmentation_data(
     results_folder: Path,
     pixel_size_override: Optional[float] = None
-) -> Tuple[List[Dict], List[Dict]]:
+) -> Tuple[List[Dict], List[Dict], int]:
     """
     Extract labels and areas from all metadata.json files.
 
@@ -22,17 +22,18 @@ def extract_segmentation_data(
         pixel_size_override: Override pixel size in nm/pixel for all micrographs
 
     Returns:
-        Tuple of (metadata_list, results_list) where each entry has a segmentation_id
+        Tuple of (metadata_list, results_list, total_micrographs)
     """
     metadata_list = []
     results_list = []
     seg_counter = 0  # Global segmentation counter
 
     metadata_files = list(results_folder.glob("*/metadata.json"))
+    total_micrographs = len(metadata_files)
 
-    if len(metadata_files) == 0:
+    if total_micrographs == 0:
         print(f"No metadata.json files found in {results_folder}")
-        return metadata_list, results_list
+        return metadata_list, results_list, 0
 
     print(f"\nFound {len(metadata_files)} metadata file(s)\n")
 
@@ -93,7 +94,7 @@ def extract_segmentation_data(
         labeled_count = sum(1 for s in segmentations if s.get('label') is not None)
         print(f"  [OK] Extracted {len(segmentations)} segmentation(s) ({labeled_count} labeled)")
 
-    return metadata_list, results_list
+    return metadata_list, results_list, total_micrographs
 
 
 def save_metadata_csv(data: List[Dict], output_file: Path) -> None:
@@ -164,7 +165,7 @@ def save_to_json(metadata: List[Dict], results: List[Dict], output_file: Path) -
     print(f"[OK] Saved {len(combined)} entries to {output_file}")
 
 
-def print_summary(metadata: List[Dict], results: List[Dict]) -> None:
+def print_summary(metadata: List[Dict], results: List[Dict], total_micrographs: int) -> None:
     """Print summary statistics."""
     if len(results) == 0:
         return
@@ -219,9 +220,13 @@ def print_summary(metadata: List[Dict], results: List[Dict]) -> None:
         print(f"  Max diameter: {max(diameters_nm):.2f}")
 
     # Micrograph counts
-    micrograph_names = set(d['micrograph_name'] for d in metadata)
-    print(f"\nMicrographs processed: {len(micrograph_names)}")
-    print(f"  Average segmentations per micrograph: {total_segmentations / len(micrograph_names):.1f}")
+    micrographs_with_segs = len(set(d['micrograph_name'] for d in metadata))
+    micrographs_without_segs = total_micrographs - micrographs_with_segs
+    print(f"\nMicrographs processed: {total_micrographs}")
+    print(f"  With segmentations: {micrographs_with_segs}")
+    print(f"  Without segmentations: {micrographs_without_segs}")
+    if micrographs_with_segs > 0:
+        print(f"  Average segmentations per annotated micrograph: {total_segmentations / micrographs_with_segs:.1f}")
     print("=" * 60)
 
 
@@ -253,14 +258,14 @@ def extract_results(
         return
 
     # Extract data
-    metadata, results = extract_segmentation_data(results_folder, pixel_size_override)
+    metadata, results, total_micrographs = extract_segmentation_data(results_folder, pixel_size_override)
 
     if len(metadata) == 0:
         print("\n[ERROR] No segmentation data found.")
         return
 
     # Print summary
-    print_summary(metadata, results)
+    print_summary(metadata, results, total_micrographs)
 
     # Determine output base path
     if output_path is None:
