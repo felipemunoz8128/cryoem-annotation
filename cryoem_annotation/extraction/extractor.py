@@ -225,8 +225,8 @@ def print_summary(metadata: List[Dict], results: List[Dict], total_micrographs: 
     print(f"\nMicrographs processed: {total_micrographs}")
     print(f"  With segmentations: {micrographs_with_segs}")
     print(f"  Without segmentations: {micrographs_without_segs}")
-    if micrographs_with_segs > 0:
-        print(f"  Average segmentations per annotated micrograph: {total_segmentations / micrographs_with_segs:.1f}")
+    if total_micrographs > 0:
+        print(f"  Average segmentations per micrograph: {total_segmentations / total_micrographs:.1f}")
     print("=" * 60)
 
 

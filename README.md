@@ -9,7 +9,7 @@ Interactive annotation tool for engineered virus-like particles (eVLPs) in cryo-
 - **Labeling Tool**: Assign labels (0-9) to segmented objects
 - **Data Extraction**: Export results to CSV or JSON format with split metadata/results files
 - **Pixel Size Support**: Automatic extraction from MRC headers with CLI override option
-- **Physical Units**: Calculate area in nm² when pixel size is available
+- **Physical Units**: Calculate equivalent diameter in nm when pixel size is available
 - **Support for MRC files**: Native support for cryo-EM MRC file format
 - **GPU/CPU Support**: Automatic GPU detection with CPU fallback
 
@@ -75,8 +75,11 @@ cryoem-annotate \
 
 **Interactive Controls:**
 - **Left-click**: Segment an object (mask appears immediately)
-- **Right-click**: Finish and proceed to next micrograph
+- **Right-click** or **Arrow keys**: Navigate between micrographs
 - **Press 'd' or 'u'**: Undo last segmentation
+- **Escape**: Finish session
+
+A navigation window shows all files with checkmarks for completed ones.
 
 ### 2. Label Segmentations
 
@@ -87,9 +90,12 @@ cryoem-label \
 ```
 
 **Interactive Controls:**
-- **Press '0'-'9'**: Set active label (0 = label 10)
+- **Press '0'-'9'**: Set active label (numeric or string labels)
 - **Left-click**: Assign active label to clicked segmentation
-- **Right-click**: Finish and proceed to next micrograph
+- **Right-click** or **Arrow keys**: Navigate between micrographs
+- **Escape**: Finish session
+
+A navigation window shows all files with checkmarks for completed ones.
 
 ### 3. Extract Results
 
@@ -101,8 +107,8 @@ cryoem-extract \
 ```
 
 This creates two CSV files:
-- `results_metadata.csv`: Segmentation IDs, coordinates, and scores
-- `results_results.csv`: Labels and areas (in pixels and nm² if pixel size available)
+- `extraction_metadata.csv`: Segmentation IDs, micrograph names, coordinates, scores, and area (pixels)
+- `extraction_results.csv`: Labels and equivalent diameter (nm, if pixel size available)
 
 ## Configuration
 
@@ -185,8 +191,8 @@ annotation_results/
 After extraction:
 
 ```
-results_metadata.csv           # Segmentation IDs, coordinates, scores
-results_results.csv            # Labels, area in pixels and nm²
+extraction_metadata.csv        # Segmentation IDs, micrograph names, coordinates, scores, area (pixels)
+extraction_results.csv         # Labels, equivalent diameter (nm)
 ```
 
 ## Python API
