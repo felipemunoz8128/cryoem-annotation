@@ -53,22 +53,28 @@ class TestExtractSegmentationData:
         assert len(results) == 6
 
     def test_creates_unique_segmentation_ids(self, sample_results_folder):
-        """Test that segmentation IDs are unique."""
+        """Test that segmentation IDs are unique integers."""
         metadata, _ = extract_segmentation_data(sample_results_folder)
 
         ids = [m["segmentation_id"] for m in metadata]
         assert len(ids) == len(set(ids))
+        # IDs should be integers 1, 2, 3, ...
+        assert all(isinstance(id, int) for id in ids)
+        assert ids == list(range(1, len(ids) + 1))
 
     def test_calculates_diameter_nm_when_pixel_size_available(self, sample_results_folder):
         """Test diameter_nm calculation when pixel size is available."""
-        _, results = extract_segmentation_data(sample_results_folder)
+        metadata, results = extract_segmentation_data(sample_results_folder)
+
+        # Build lookup from segmentation_id to micrograph_name
+        id_to_mic = {m["segmentation_id"]: m["micrograph_name"] for m in metadata}
 
         # First micrograph has pixel_size_nm=0.5
-        micro_001_results = [r for r in results if "micro_001" in r["segmentation_id"]]
+        micro_001_results = [r for r in results if id_to_mic[r["segmentation_id"]] == "micro_001"]
         assert all(r["diameter_nm"] is not None for r in micro_001_results)
 
         # Second micrograph has no pixel size
-        micro_002_results = [r for r in results if "micro_002" in r["segmentation_id"]]
+        micro_002_results = [r for r in results if id_to_mic[r["segmentation_id"]] == "micro_002"]
         assert all(r["diameter_nm"] is None for r in micro_002_results)
 
     def test_pixel_size_override(self, sample_results_folder):

@@ -26,6 +26,7 @@ def extract_segmentation_data(
     """
     metadata_list = []
     results_list = []
+    seg_counter = 0  # Global segmentation counter
 
     metadata_files = list(results_folder.glob("*/metadata.json"))
 
@@ -56,10 +57,9 @@ def extract_segmentation_data(
 
         # Extract data for each segmentation
         for seg in segmentations:
+            seg_counter += 1
+            seg_id = seg_counter
             click_index = seg.get('click_index')
-
-            # Create unique segmentation ID
-            seg_id = f"{micrograph_name}_seg{click_index:03d}"
 
             # Get area and calculate diameter
             area_pixels = seg.get('mask_area')
