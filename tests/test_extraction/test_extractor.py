@@ -98,6 +98,7 @@ class TestSaveMetadataCsv:
                 "click_index": 1,
                 "click_coords": [100, 200],
                 "mask_score": 0.95,
+                "area_pixels": 5000,
             }
         ]
         output_path = temp_output_dir / "metadata.csv"
@@ -115,6 +116,7 @@ class TestSaveMetadataCsv:
                 "click_index": 1,
                 "click_coords": [100, 200],
                 "mask_score": 0.95,
+                "area_pixels": 5000,
             }
         ]
         output_path = temp_output_dir / "metadata.csv"
@@ -126,7 +128,7 @@ class TestSaveMetadataCsv:
             headers = reader.fieldnames
 
         expected = ["segmentation_id", "micrograph_name", "click_index",
-                    "click_coords", "mask_score"]
+                    "click_coords", "mask_score", "area_pixels"]
         assert headers == expected
 
 
@@ -139,7 +141,6 @@ class TestSaveResultsCsv:
             {
                 "segmentation_id": "test_seg001",
                 "label": 1,
-                "area_pixels": 5000,
                 "diameter_nm": 39.89,
             }
         ]
@@ -155,7 +156,6 @@ class TestSaveResultsCsv:
             {
                 "segmentation_id": "test_seg001",
                 "label": 1,
-                "area_pixels": 5000,
                 "diameter_nm": 39.89,
             }
         ]
@@ -167,7 +167,7 @@ class TestSaveResultsCsv:
             reader = csv.DictReader(f)
             headers = reader.fieldnames
 
-        expected = ["segmentation_id", "label", "area_pixels", "diameter_nm"]
+        expected = ["segmentation_id", "label", "diameter_nm"]
         assert headers == expected
 
     def test_handles_none_diameter_nm(self, temp_output_dir):
@@ -176,7 +176,6 @@ class TestSaveResultsCsv:
             {
                 "segmentation_id": "test_seg001",
                 "label": 1,
-                "area_pixels": 5000,
                 "diameter_nm": None,
             }
         ]

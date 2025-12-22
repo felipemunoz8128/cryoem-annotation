@@ -61,17 +61,7 @@ def extract_segmentation_data(
             # Create unique segmentation ID
             seg_id = f"{micrograph_name}_seg{click_index:03d}"
 
-            # Metadata entry
-            metadata_entry = {
-                'segmentation_id': seg_id,
-                'micrograph_name': micrograph_name,
-                'click_index': click_index,
-                'click_coords': seg.get('click_coords'),
-                'mask_score': seg.get('mask_score'),
-            }
-            metadata_list.append(metadata_entry)
-
-            # Results entry
+            # Get area and calculate diameter
             area_pixels = seg.get('mask_area')
             diameter_nm = None
             if area_pixels is not None and pixel_size_nm is not None:
@@ -81,10 +71,21 @@ def extract_segmentation_data(
                 area_nm2 = area_pixels * (pixel_size_nm ** 2)
                 diameter_nm = math.sqrt(4 * area_nm2 / math.pi)
 
+            # Metadata entry
+            metadata_entry = {
+                'segmentation_id': seg_id,
+                'micrograph_name': micrograph_name,
+                'click_index': click_index,
+                'click_coords': seg.get('click_coords'),
+                'mask_score': seg.get('mask_score'),
+                'area_pixels': area_pixels,
+            }
+            metadata_list.append(metadata_entry)
+
+            # Results entry
             results_entry = {
                 'segmentation_id': seg_id,
                 'label': seg.get('label'),
-                'area_pixels': area_pixels,
                 'diameter_nm': diameter_nm,
             }
             results_list.append(results_entry)
@@ -102,7 +103,7 @@ def save_metadata_csv(data: List[Dict], output_file: Path) -> None:
         return
 
     fieldnames = ['segmentation_id', 'micrograph_name', 'click_index',
-                  'click_coords', 'mask_score']
+                  'click_coords', 'mask_score', 'area_pixels']
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
@@ -124,7 +125,7 @@ def save_results_csv(data: List[Dict], output_file: Path) -> None:
         print("\nNo results to save.")
         return
 
-    fieldnames = ['segmentation_id', 'label', 'area_pixels', 'diameter_nm']
+    fieldnames = ['segmentation_id', 'label', 'diameter_nm']
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
@@ -263,7 +264,7 @@ def extract_results(
 
     # Determine output base path
     if output_path is None:
-        output_base = results_folder / "results"
+        output_base = results_folder / "extraction"
     else:
         # Remove extension if provided to use as base
         output_base = output_path.with_suffix('')
