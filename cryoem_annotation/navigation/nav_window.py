@@ -36,8 +36,16 @@ class NavigationWindow:
         self.current_index = 0
         self.completed: Set[int] = set()
 
-        # Create window as Toplevel (uses existing Tk instance from matplotlib)
-        self.root = tk.Toplevel()
+        # Create Tk root if none exists, otherwise use Toplevel
+        try:
+            # Check if a Tk root already exists
+            existing_root = tk._default_root
+            if existing_root is None:
+                self.root = tk.Tk()
+            else:
+                self.root = tk.Toplevel()
+        except Exception:
+            self.root = tk.Tk()
         self.root.title(title)
         self.root.geometry("280x400")
         self.root.resizable(True, True)
