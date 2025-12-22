@@ -7,7 +7,6 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import torch
-from tqdm import tqdm
 
 from cryoem_annotation.core.sam_model import SAMModel
 from cryoem_annotation.core.image_loader import load_micrograph_with_pixel_size, get_image_files
@@ -16,6 +15,7 @@ from cryoem_annotation.core.colors import generate_label_colors
 from cryoem_annotation.annotation.click_collector import RealTimeClickCollector, create_bounded_overlay
 from cryoem_annotation.io.metadata import save_metadata, save_combined_results
 from cryoem_annotation.io.masks import save_mask_binary
+from cryoem_annotation.navigation import NavigationWindow
 
 
 def annotate_micrographs(
@@ -66,61 +66,54 @@ def annotate_micrographs(
     
     # Results storage
     all_results = []
-    
-    # Process each file with progress bar
-    for idx, file_path in enumerate(tqdm(image_files, desc="Micrographs", unit="file")):
-        print(f"\n[{idx+1}/{len(image_files)}] Processing: {file_path.name}")
-        print("-" * 60)
+    completed_indices = set()
 
-        # Load micrograph with pixel size from MRC header
-        micrograph, pixel_size = load_micrograph_with_pixel_size(file_path)
-        if micrograph is None:
-            print(f"  [ERROR] Failed to load {file_path.name}, skipping...")
-            continue
+    # Navigation state
+    nav_state = {'index': 0, 'action': None, 'target': None}
 
-        if pixel_size is not None:
-            print(f"  Pixel size (from MRC header): {pixel_size:.4f} nm/pixel")
-        
-        # Normalize for display
-        micrograph_display = normalize_image(micrograph)
-        
-        # Convert to RGB for SAM
-        if len(micrograph_display.shape) == 2:
-            micrograph_rgb = cv2.cvtColor(micrograph_display, cv2.COLOR_GRAY2RGB)
-        else:
-            micrograph_rgb = micrograph_display
-        
-        # Set image in predictor (only once per image)
-        predictor.set_image(micrograph_rgb)
-        
-        # Collect clicks with real-time segmentation
-        collector = RealTimeClickCollector(
-            micrograph_display,
-            micrograph_rgb,
-            predictor,
-            title=file_path.name
-        )
-        
-        clicks, segmentations = collector.collect_clicks()
-        
+    def on_navigate(action: str, target_index: Optional[int]) -> None:
+        """Callback for navigation events."""
+        nav_state['action'] = action
+        nav_state['target'] = target_index
+
+    # Create navigation window
+    nav_window = NavigationWindow(image_files, on_navigate, title="Annotation")
+
+    # Current collector and image data (for saving on navigation)
+    current_collector = None
+    current_file_path = None
+    current_micrograph_display = None
+    current_micrograph_rgb = None
+    current_pixel_size = None
+
+    def save_current_segmentations() -> None:
+        """Save segmentations for the current file if any exist."""
+        nonlocal current_collector, current_file_path, current_micrograph_display
+        nonlocal current_micrograph_rgb, current_pixel_size
+
+        if current_collector is None or current_file_path is None:
+            return
+
+        clicks = current_collector.clicks
+        segmentations = current_collector.segmentations
+
         if len(clicks) == 0:
-            print("  No clicks recorded, skipping...")
-            continue
-        
-        print(f"  [OK] Recorded {len(clicks)} segmentation(s)")
-        
+            return
+
+        print(f"  [OK] Saving {len(clicks)} segmentation(s) for {current_file_path.name}")
+
         # Create output directory for this image
-        image_output_dir = output_folder / file_path.stem
+        image_output_dir = output_folder / current_file_path.stem
         image_output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Process segmentations for saving
         all_masks = []
         seg_data_list = []
-        
+
         for seg_data in segmentations:
             mask = seg_data['mask']
             all_masks.append(mask)
-            
+
             # Prepare data for JSON (without the mask array)
             seg_json = {
                 'click_index': seg_data['click_index'],
@@ -129,43 +122,178 @@ def annotate_micrographs(
                 'mask_area': seg_data['mask_area'],
             }
             seg_data_list.append(seg_json)
-            
+
             # Save raw mask as binary
             click_idx = seg_data['click_index']
             mask_binary_filename = image_output_dir / f"mask_{click_idx:03d}_binary.png"
             save_mask_binary(mask, mask_binary_filename)
-        
+
         # Save results for this image
         result = {
-            'filename': file_path.name,
-            'filepath': str(file_path),
-            'image_shape': list(micrograph_rgb.shape[:2]),
+            'filename': current_file_path.name,
+            'filepath': str(current_file_path),
+            'image_shape': list(current_micrograph_rgb.shape[:2]),
             'num_clicks': len(clicks),
             'timestamp': datetime.now().isoformat(),
-            'pixel_size_nm': pixel_size,
+            'pixel_size_nm': current_pixel_size,
             'segmentations': seg_data_list,
         }
-        
+
         all_results.append(result)
-        
+
         # Save metadata
         save_metadata(result, image_output_dir / "metadata.json")
-        
+
         # Save visualization
         _save_overview_image(
-            micrograph_display,
+            current_micrograph_display,
             clicks,
             all_masks,
             segmentations,
-            file_path.name,
+            current_file_path.name,
             image_output_dir / "overview.png"
         )
-        
+
         print(f"  [OK] Saved results to {image_output_dir}")
-        
-        # Clear VRAM if using CUDA
-        if device == "cuda" or (device is None and torch.cuda.is_available()):
-            torch.cuda.empty_cache()
+
+        # Mark as completed in navigation
+        completed_indices.add(nav_state['index'])
+        nav_window.mark_completed(nav_state['index'])
+
+    def load_file(idx: int) -> bool:
+        """Load a file and set up the collector. Returns True if successful."""
+        nonlocal current_collector, current_file_path, current_micrograph_display
+        nonlocal current_micrograph_rgb, current_pixel_size
+
+        file_path = image_files[idx]
+        print(f"\n[{idx+1}/{len(image_files)}] Processing: {file_path.name}")
+        print("-" * 60)
+
+        # Load micrograph with pixel size from MRC header
+        micrograph, pixel_size = load_micrograph_with_pixel_size(file_path)
+        if micrograph is None:
+            print(f"  [ERROR] Failed to load {file_path.name}")
+            return False
+
+        if pixel_size is not None:
+            print(f"  Pixel size (from MRC header): {pixel_size:.4f} nm/pixel")
+
+        # Normalize for display
+        micrograph_display = normalize_image(micrograph)
+
+        # Convert to RGB for SAM
+        if len(micrograph_display.shape) == 2:
+            micrograph_rgb = cv2.cvtColor(micrograph_display, cv2.COLOR_GRAY2RGB)
+        else:
+            micrograph_rgb = micrograph_display
+
+        # Set image in predictor (only once per image)
+        predictor.set_image(micrograph_rgb)
+
+        # Store current state
+        current_file_path = file_path
+        current_micrograph_display = micrograph_display
+        current_micrograph_rgb = micrograph_rgb
+        current_pixel_size = pixel_size
+
+        # Create or update collector
+        if current_collector is None:
+            current_collector = RealTimeClickCollector(
+                micrograph_display,
+                micrograph_rgb,
+                predictor,
+                title=file_path.name,
+                navigation_callback=on_navigate
+            )
+            if not current_collector.setup_figure():
+                print("  [ERROR] Could not create figure window")
+                return False
+        else:
+            # Update existing collector with new image
+            current_collector.update_image(micrograph_display, micrograph_rgb, file_path.name)
+            # Update predictor reference (it's the same predictor, but image changed)
+
+        print("\n  Figure window opened. Click on objects in the image.")
+        print("  Instructions:")
+        print("    - Left-click: Segment an object (mask appears immediately)")
+        print("    - Right-click or Arrow keys: Navigate between files")
+        print("    - Press 'd' or 'u': Undo last segmentation")
+        print("    - Escape: Finish session")
+        print()
+
+        return True
+
+    # Main event-driven loop
+    try:
+        # Load first file
+        while nav_state['index'] < len(image_files):
+            if not load_file(nav_state['index']):
+                # Skip to next file if load failed
+                nav_state['index'] += 1
+                nav_window.set_current(nav_state['index'])
+                continue
+            break
+
+        # Event loop - process until quit
+        while nav_state['action'] != 'quit' and nav_state['index'] < len(image_files):
+            # Process matplotlib and tkinter events
+            plt.pause(0.05)
+
+            # Handle navigation action if any
+            if nav_state['action'] is not None:
+                action = nav_state['action']
+                target = nav_state['target']
+                nav_state['action'] = None
+                nav_state['target'] = None
+
+                if action == 'quit':
+                    # Save current work before quitting
+                    save_current_segmentations()
+                    break
+
+                # Save current segmentations before navigating
+                save_current_segmentations()
+
+                # Clear current collector's segmentations for new file
+                if current_collector:
+                    current_collector.clear_segmentations()
+
+                # Determine new index
+                if action == 'next':
+                    new_index = nav_state['index'] + 1
+                elif action == 'prev':
+                    new_index = max(0, nav_state['index'] - 1)
+                elif action == 'goto':
+                    new_index = target if target is not None else nav_state['index']
+                else:
+                    continue
+
+                # Bounds check
+                if new_index >= len(image_files):
+                    print("\n  [OK] Reached end of file list.")
+                    break
+
+                nav_state['index'] = new_index
+                nav_window.set_current(new_index)
+
+                # Load new file
+                if not load_file(new_index):
+                    # Skip to next if failed
+                    nav_state['action'] = 'next'
+                    continue
+
+                # Clear VRAM if using CUDA
+                if device == "cuda" or (device is None and torch.cuda.is_available()):
+                    torch.cuda.empty_cache()
+
+    except KeyboardInterrupt:
+        print("\n\n  [WARNING] Session interrupted by user")
+        save_current_segmentations()
+    finally:
+        # Cleanup
+        if current_collector:
+            current_collector.close_figure()
+        nav_window.destroy()
     
     # Save combined results
     combined_output = output_folder / "all_annotations.json"

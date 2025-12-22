@@ -1,6 +1,6 @@
 """Click collection with real-time SAM segmentation."""
 
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Callable
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
@@ -73,26 +73,36 @@ plt.ion()  # Keep interactive mode ON
 
 class RealTimeClickCollector:
     """Collects mouse clicks and shows SAM segmentations in real-time."""
-    
-    def __init__(self, image: np.ndarray, micrograph_rgb: np.ndarray, 
-                 predictor, title: str = "Click on objects"):
+
+    def __init__(
+        self,
+        image: np.ndarray,
+        micrograph_rgb: np.ndarray,
+        predictor,
+        title: str = "Click on objects",
+        navigation_callback: Optional[Callable[[str, Optional[int]], None]] = None
+    ):
         """
         Initialize click collector.
-        
+
         Args:
             image: Image for display (grayscale, normalized)
             micrograph_rgb: RGB image for SAM (3-channel)
             predictor: SAM predictor instance
             title: Window title
+            navigation_callback: Optional callback for navigation events.
+                                 Called with (action, target_index) where action
+                                 is 'next', 'prev', 'goto', or 'quit'.
         """
         self.image = image  # For display
         self.micrograph_rgb = micrograph_rgb  # For SAM
         self.predictor = predictor
         self.title = title
+        self.navigation_callback = navigation_callback
         self.fig = None
         self.ax = None
         self.finished = False
-        
+
         # Store clicks and their corresponding segmentations
         self.clicks = []  # List of (x, y) tuples
         self.segmentations = []  # List of dicts with mask, score, etc.
@@ -110,15 +120,21 @@ class RealTimeClickCollector:
         """Handle mouse clicks."""
         if event.inaxes != self.ax:
             return
-        
-        # Right click or middle click to finish
+
+        # Right click or middle click to finish/next
         if event.button == 3 or event.button == 2:
-            self.finished = True
-            print(f"\n  [OK] Right-click detected. Finished with {len(self.clicks)} segmentation(s).")
-            try:
-                plt.close(self.fig)
-            except Exception:
-                pass
+            if self.navigation_callback:
+                # Navigation mode: signal to go to next file
+                print(f"\n  [OK] Right-click: moving to next file ({len(self.clicks)} segmentation(s))")
+                self.navigation_callback('next', None)
+            else:
+                # Original mode: finish and close
+                self.finished = True
+                print(f"\n  [OK] Right-click detected. Finished with {len(self.clicks)} segmentation(s).")
+                try:
+                    plt.close(self.fig)
+                except Exception:
+                    pass
             return
         
         # Left click to add point and segment
@@ -181,7 +197,23 @@ class RealTimeClickCollector:
             print(f"  -> Total segmentations: {len(self.segmentations)}")
     
     def on_key(self, event):
-        """Handle keyboard events for undo/delete."""
+        """Handle keyboard events for undo/delete and navigation."""
+        # Navigation keys (only in navigation mode)
+        if self.navigation_callback:
+            if event.key == 'left':
+                print("\n  [OK] Left arrow: going to previous file")
+                self.navigation_callback('prev', None)
+                return
+            elif event.key == 'right':
+                print(f"\n  [OK] Right arrow: going to next file ({len(self.clicks)} segmentation(s))")
+                self.navigation_callback('next', None)
+                return
+            elif event.key == 'escape':
+                print("\n  [OK] Escape: finishing session")
+                self.navigation_callback('quit', None)
+                return
+
+        # Undo keys
         if event.key in ['d', 'D', 'u', 'U', 'delete', 'backspace']:
             if len(self.segmentations) > 0:
                 # Remove last segmentation data
@@ -215,9 +247,14 @@ class RealTimeClickCollector:
     
     def _update_title(self):
         """Update the figure title."""
-        title_text = (f"{self.title}\n"
-                     f"Left-click: Segment | Right-click: Finish | "
-                     f"'d'/'u': Undo")
+        if self.navigation_callback:
+            title_text = (f"{self.title}\n"
+                         f"Left-click: Segment | Right-click/Arrow: Navigate | "
+                         f"'d': Undo | Esc: Quit")
+        else:
+            title_text = (f"{self.title}\n"
+                         f"Left-click: Segment | Right-click: Finish | "
+                         f"'d'/'u': Undo")
         self.ax.set_title(title_text, fontsize=14, fontweight='bold')
     
     def collect_clicks(self) -> Tuple[List[Tuple[int, int]], List[Dict]]:
@@ -341,4 +378,97 @@ class RealTimeClickCollector:
                 break
         
         return clicks, segmentations
+
+    def setup_figure(self) -> bool:
+        """Set up the figure without blocking (for navigation mode).
+
+        Returns:
+            True if figure was created successfully, False otherwise.
+        """
+        try:
+            self.fig, self.ax = plt.subplots(figsize=(12, 12))
+        except Exception as e:
+            print(f"\n  [ERROR] Could not create figure: {e}")
+            return False
+
+        # Display base image
+        self.base_image = self.ax.imshow(self.image, cmap='gray')
+        self.ax.set_autoscale_on(False)
+        self._update_title()
+        self.ax.axis('off')
+
+        # Connect event handlers
+        self._cid_click = self.fig.canvas.mpl_connect('button_press_event', self.on_click)
+        self._cid_key = self.fig.canvas.mpl_connect('key_press_event', self.on_key)
+
+        plt.tight_layout()
+        plt.show(block=False)
+
+        return True
+
+    def update_image(self, image: np.ndarray, micrograph_rgb: np.ndarray, title: str) -> None:
+        """Update the displayed image (for navigation to a new file).
+
+        Args:
+            image: New image for display (grayscale, normalized)
+            micrograph_rgb: New RGB image for SAM
+            title: New window title
+        """
+        self.image = image
+        self.micrograph_rgb = micrograph_rgb
+        self.title = title
+
+        # Clear existing segmentations
+        self.clear_segmentations()
+
+        # Update the displayed image
+        self.base_image.set_data(image)
+        self._update_title()
+
+        self.fig.canvas.draw_idle()
+        self.fig.canvas.flush_events()
+
+    def clear_segmentations(self) -> None:
+        """Clear all segmentations and visual elements."""
+        # Remove all visual elements
+        for overlay in self.mask_overlays:
+            if overlay is not None:
+                try:
+                    overlay.remove()
+                except Exception:
+                    pass
+        self.mask_overlays.clear()
+
+        for marker in self.click_markers:
+            try:
+                marker.remove()
+            except Exception:
+                pass
+        self.click_markers.clear()
+
+        for text in self.click_texts:
+            try:
+                text.remove()
+            except Exception:
+                pass
+        self.click_texts.clear()
+
+        # Clear data
+        self.clicks.clear()
+        self.segmentations.clear()
+
+    def close_figure(self) -> None:
+        """Close the figure and disconnect event handlers."""
+        try:
+            if hasattr(self, '_cid_click'):
+                self.fig.canvas.mpl_disconnect(self._cid_click)
+            if hasattr(self, '_cid_key'):
+                self.fig.canvas.mpl_disconnect(self._cid_key)
+        except Exception:
+            pass
+
+        try:
+            plt.close(self.fig)
+        except Exception:
+            pass
 
