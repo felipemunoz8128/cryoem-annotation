@@ -56,6 +56,11 @@ class NavigationWindow:
         self._setup_ui()
         self._refresh_list()
 
+        # Ensure window is visible
+        self.root.deiconify()
+        self.root.lift()
+        self.root.update()
+
     def _setup_ui(self) -> None:
         """Set up the UI components."""
         # Main frame with padding
