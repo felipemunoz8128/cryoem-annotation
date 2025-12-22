@@ -59,24 +59,24 @@ class TestExtractSegmentationData:
         ids = [m["segmentation_id"] for m in metadata]
         assert len(ids) == len(set(ids))
 
-    def test_calculates_area_nm2_when_pixel_size_available(self, sample_results_folder):
-        """Test area_nm2 calculation when pixel size is available."""
+    def test_calculates_diameter_nm_when_pixel_size_available(self, sample_results_folder):
+        """Test diameter_nm calculation when pixel size is available."""
         _, results = extract_segmentation_data(sample_results_folder)
 
         # First micrograph has pixel_size_nm=0.5
         micro_001_results = [r for r in results if "micro_001" in r["segmentation_id"]]
-        assert all(r["area_nm2"] is not None for r in micro_001_results)
+        assert all(r["diameter_nm"] is not None for r in micro_001_results)
 
         # Second micrograph has no pixel size
         micro_002_results = [r for r in results if "micro_002" in r["segmentation_id"]]
-        assert all(r["area_nm2"] is None for r in micro_002_results)
+        assert all(r["diameter_nm"] is None for r in micro_002_results)
 
     def test_pixel_size_override(self, sample_results_folder):
         """Test that pixel_size_override works."""
         _, results = extract_segmentation_data(sample_results_folder, pixel_size_override=1.0)
 
-        # All should have area_nm2 calculated
-        assert all(r["area_nm2"] is not None for r in results)
+        # All should have diameter_nm calculated
+        assert all(r["diameter_nm"] is not None for r in results)
 
     def test_empty_folder(self, temp_output_dir):
         """Test extraction from empty folder."""
@@ -140,7 +140,7 @@ class TestSaveResultsCsv:
                 "segmentation_id": "test_seg001",
                 "label": 1,
                 "area_pixels": 5000,
-                "area_nm2": 1250.0,
+                "diameter_nm": 39.89,
             }
         ]
         output_path = temp_output_dir / "results.csv"
@@ -156,7 +156,7 @@ class TestSaveResultsCsv:
                 "segmentation_id": "test_seg001",
                 "label": 1,
                 "area_pixels": 5000,
-                "area_nm2": 1250.0,
+                "diameter_nm": 39.89,
             }
         ]
         output_path = temp_output_dir / "results.csv"
@@ -167,17 +167,17 @@ class TestSaveResultsCsv:
             reader = csv.DictReader(f)
             headers = reader.fieldnames
 
-        expected = ["segmentation_id", "label", "area_pixels", "area_nm2"]
+        expected = ["segmentation_id", "label", "area_pixels", "diameter_nm"]
         assert headers == expected
 
-    def test_handles_none_area_nm2(self, temp_output_dir):
-        """Test that None area_nm2 is handled correctly."""
+    def test_handles_none_diameter_nm(self, temp_output_dir):
+        """Test that None diameter_nm is handled correctly."""
         data = [
             {
                 "segmentation_id": "test_seg001",
                 "label": 1,
                 "area_pixels": 5000,
-                "area_nm2": None,
+                "diameter_nm": None,
             }
         ]
         output_path = temp_output_dir / "results.csv"
@@ -188,4 +188,4 @@ class TestSaveResultsCsv:
             reader = csv.DictReader(f)
             row = next(reader)
 
-        assert row["area_nm2"] == ""
+        assert row["diameter_nm"] == ""

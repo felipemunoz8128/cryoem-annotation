@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 import json
 import csv
+import math
 from tqdm import tqdm
 
 from cryoem_annotation.io.metadata import load_metadata
@@ -72,16 +73,19 @@ def extract_segmentation_data(
 
             # Results entry
             area_pixels = seg.get('mask_area')
-            area_nm2 = None
+            diameter_nm = None
             if area_pixels is not None and pixel_size_nm is not None:
-                # Area in nm^2 = area_pixels * (pixel_size_nm)^2
+                # Convert area to equivalent circle diameter
+                # Area_nm2 = area_pixels * (pixel_size_nm)^2
+                # Diameter = 2 * sqrt(Area / pi) = sqrt(4 * Area / pi)
                 area_nm2 = area_pixels * (pixel_size_nm ** 2)
+                diameter_nm = math.sqrt(4 * area_nm2 / math.pi)
 
             results_entry = {
                 'segmentation_id': seg_id,
                 'label': seg.get('label'),
                 'area_pixels': area_pixels,
-                'area_nm2': area_nm2,
+                'diameter_nm': diameter_nm,
             }
             results_list.append(results_entry)
 
@@ -120,7 +124,7 @@ def save_results_csv(data: List[Dict], output_file: Path) -> None:
         print("\nNo results to save.")
         return
 
-    fieldnames = ['segmentation_id', 'label', 'area_pixels', 'area_nm2']
+    fieldnames = ['segmentation_id', 'label', 'area_pixels', 'diameter_nm']
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
@@ -129,9 +133,9 @@ def save_results_csv(data: List[Dict], output_file: Path) -> None:
 
         for entry in data:
             row = entry.copy()
-            # Format area_nm2 with reasonable precision
-            if row['area_nm2'] is not None:
-                row['area_nm2'] = f"{row['area_nm2']:.2f}"
+            # Format diameter_nm with reasonable precision
+            if row['diameter_nm'] is not None:
+                row['diameter_nm'] = f"{row['diameter_nm']:.2f}"
             writer.writerow(row)
 
     print(f"[OK] Saved {len(data)} entries to {output_file}")
@@ -203,15 +207,15 @@ def print_summary(metadata: List[Dict], results: List[Dict]) -> None:
         print(f"  Min area: {min(areas_pixels)}")
         print(f"  Max area: {max(areas_pixels)}")
 
-    # Area statistics in nm^2 (if available)
-    areas_nm2 = [d['area_nm2'] for d in results if d['area_nm2'] is not None]
-    if areas_nm2:
-        print(f"\nMask area statistics (nm^2):")
-        print(f"  Total objects: {len(areas_nm2)}")
-        print(f"  Mean area: {sum(areas_nm2) / len(areas_nm2):.2f}")
-        print(f"  Median area: {sorted(areas_nm2)[len(areas_nm2)//2]:.2f}")
-        print(f"  Min area: {min(areas_nm2):.2f}")
-        print(f"  Max area: {max(areas_nm2):.2f}")
+    # Diameter statistics in nm (if available)
+    diameters_nm = [d['diameter_nm'] for d in results if d['diameter_nm'] is not None]
+    if diameters_nm:
+        print(f"\nEquivalent diameter statistics (nm):")
+        print(f"  Total objects: {len(diameters_nm)}")
+        print(f"  Mean diameter: {sum(diameters_nm) / len(diameters_nm):.2f}")
+        print(f"  Median diameter: {sorted(diameters_nm)[len(diameters_nm)//2]:.2f}")
+        print(f"  Min diameter: {min(diameters_nm):.2f}")
+        print(f"  Max diameter: {max(diameters_nm):.2f}")
 
     # Micrograph counts
     micrograph_names = set(d['micrograph_name'] for d in metadata)
