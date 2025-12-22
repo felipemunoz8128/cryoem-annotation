@@ -710,6 +710,7 @@ def label_segmentations(
         while nav_state['action'] != 'quit' and nav_state['index'] < len(annotated_files):
             # Process matplotlib and tkinter events
             plt.pause(0.05)
+            nav_window.root.update()
 
             # Handle navigation action if any
             if nav_state['action'] is not None:
