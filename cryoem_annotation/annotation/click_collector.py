@@ -2,10 +2,9 @@
 
 from typing import List, Dict, Tuple, Optional, Callable
 import numpy as np
-import matplotlib
-import matplotlib.pyplot as plt
 
 from cryoem_annotation.core.colors import generate_label_colors
+from cryoem_annotation.core.matplotlib_utils import plt
 
 
 def create_bounded_overlay(mask: np.ndarray, color: list) -> Tuple[Optional[np.ndarray], Optional[list]]:
@@ -48,27 +47,6 @@ def create_bounded_overlay(mask: np.ndarray, color: list) -> Tuple[Optional[np.n
     extent = [cmin, cmax+1, rmax+1, rmin]
 
     return overlay, extent
-
-# Configure matplotlib backend for interactivity
-_backend_set = False
-_backend_options = ['Qt5Agg', 'MacOSX', 'TkAgg']
-
-for backend_name in _backend_options:
-    try:
-        matplotlib.use(backend_name)
-        import matplotlib.pyplot as plt
-        test_fig = plt.figure()
-        plt.close(test_fig)
-        _backend_set = True
-        break
-    except Exception:
-        continue
-
-if not _backend_set:
-    print("Warning: Could not set interactive backend. Using default.")
-
-import matplotlib.pyplot as plt
-plt.ion()  # Keep interactive mode ON
 
 
 class RealTimeClickCollector:

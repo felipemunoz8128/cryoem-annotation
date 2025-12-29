@@ -27,7 +27,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Goal**: Clean up technical debt to make multi-grid integration safer. Extract duplicate matplotlib backend initialization to shared module, address SAM prediction logic duplication, improve code organization in large files.
 **Depends on**: Nothing (first phase)
 **Research**: Unlikely (internal code reorganization, established patterns)
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [x] 01-01: Extract matplotlib backend utility, improve backend logging
+- [ ] 01-02: Deduplicate SAM prediction logic, add .env.example
 
 Key work:
 - Extract matplotlib backend initialization to shared utility
@@ -78,7 +82,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation Refactoring | 0/TBD | Not started | - |
+| 1. Foundation Refactoring | 1/2 | In progress | - |
 | 2. Multi-Grid Data Model | 0/TBD | Not started | - |
 | 3. Grid-Aware UI | 0/TBD | Not started | - |
 | 4. Output & Extraction | 0/TBD | Not started | - |

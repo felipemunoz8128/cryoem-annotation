@@ -5,12 +5,11 @@ from typing import List, Dict, Optional, Tuple, Callable
 from datetime import datetime
 import numpy as np
 import cv2
-import matplotlib
-import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 
 from cryoem_annotation.core.image_loader import load_micrograph, get_image_files
 from cryoem_annotation.core.image_processing import normalize_image
+from cryoem_annotation.core.matplotlib_utils import plt
 from cryoem_annotation.io.metadata import load_metadata, save_metadata
 from cryoem_annotation.io.masks import load_mask_binary
 from cryoem_annotation.labeling.categories import LabelCategories
@@ -23,24 +22,6 @@ try:
     TKINTER_AVAILABLE = True
 except ImportError:
     TKINTER_AVAILABLE = False
-
-# Configure matplotlib backend
-_backend_set = False
-_backend_options = ['Qt5Agg', 'MacOSX', 'TkAgg']
-
-for backend_name in _backend_options:
-    try:
-        matplotlib.use(backend_name)
-        import matplotlib.pyplot as plt
-        test_fig = plt.figure()
-        plt.close(test_fig)
-        _backend_set = True
-        break
-    except Exception:
-        continue
-
-if not _backend_set:
-    print("Warning: Could not set interactive backend. Using default.")
 
 
 def get_contour_from_mask(mask: np.ndarray) -> Optional[np.ndarray]:
