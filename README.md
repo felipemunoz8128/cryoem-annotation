@@ -6,8 +6,10 @@ Interactive annotation tool for engineered virus-like particles (eVLPs) in cryo-
 
 - **Interactive Annotation**: Click on objects in micrographs to automatically segment them using SAM
 - **Real-time Segmentation**: See segmentation results immediately as you click
+- **Multi-Grid Support**: Process multiple grids from motion correction transfer pipelines (`motion_corrected/{Grid}/`)
+- **Grid-Aware Navigation**: Jump between any micrograph from any grid within a single session
 - **Labeling Tool**: Assign labels (0-9) to segmented objects
-- **Data Extraction**: Export results to CSV or JSON format with split metadata/results files
+- **Data Extraction**: Export results to CSV or JSON format with grid context and per-grid summaries
 - **Pixel Size Support**: Automatic extraction from MRC headers with CLI override option
 - **Physical Units**: Calculate equivalent diameter in nm when pixel size is available
 - **Support for MRC files**: Native support for cryo-EM MRC file format
@@ -66,6 +68,7 @@ pip install -e .
 
 ### 1. Annotate Micrographs
 
+**Single folder of micrographs:**
 ```bash
 cryoem-annotate \
     --micrographs /path/to/micrographs \
@@ -73,13 +76,23 @@ cryoem-annotate \
     --output annotation_results
 ```
 
+**Multi-grid dataset (from motion correction pipeline):**
+```bash
+cryoem-annotate \
+    --micrographs /path/to/motion_corrected \
+    --checkpoint sam_vit_b_01ec64.pth \
+    --output annotation_results
+```
+
+The tool automatically detects multi-grid structure (`motion_corrected/{Grid}/*.mrc`) and organizes output accordingly.
+
 **Interactive Controls:**
 - **Left-click**: Segment an object (mask appears immediately)
 - **Right-click** or **Arrow keys**: Navigate between micrographs
 - **Press 'd' or 'u'**: Undo last segmentation
 - **Escape**: Finish session
 
-A navigation window shows all files with checkmarks for completed ones.
+A navigation window shows all files organized by grid (for multi-grid datasets) with checkmarks for completed ones.
 
 ### 2. Label Segmentations
 
@@ -178,8 +191,7 @@ Options:
 
 ## Output Structure
 
-After annotation, results are saved in the following structure:
-
+**Single-folder mode:**
 ```
 annotation_results/
 ├── micrograph_name_1/
@@ -192,12 +204,28 @@ annotation_results/
 └── all_annotations.json       # Combined results
 ```
 
-After extraction:
-
+**Multi-grid mode:**
 ```
-extraction_metadata.csv        # Segmentation IDs, micrograph names, coordinates, scores, area (pixels)
+annotation_results/
+├── Grid1/
+│   ├── micrograph_001/
+│   │   ├── metadata.json      # Includes grid_name field
+│   │   ├── overview.png
+│   │   └── ...
+│   └── micrograph_002/
+│       └── ...
+├── Grid2/
+│   └── ...
+└── all_annotations.json       # Combined results with grid context
+```
+
+**After extraction:**
+```
+extraction_metadata.csv        # Segmentation IDs, grid names, micrograph names, coordinates, scores, area (pixels)
 extraction_results.csv         # Labels, equivalent diameter (nm)
 ```
+
+For multi-grid datasets, the extraction summary includes per-grid statistics showing micrograph counts, segmentation counts, and labeled/unlabeled breakdown for each grid.
 
 ## Python API
 
