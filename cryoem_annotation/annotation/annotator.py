@@ -9,9 +9,10 @@ import matplotlib.pyplot as plt
 import torch
 
 from cryoem_annotation.core.sam_model import SAMModel
-from cryoem_annotation.core.image_loader import load_micrograph_with_pixel_size, get_image_files
+from cryoem_annotation.core.image_loader import load_micrograph_with_pixel_size
 from cryoem_annotation.core.image_processing import normalize_image
 from cryoem_annotation.core.colors import generate_label_colors
+from cryoem_annotation.core.grid_dataset import GridDataset, MicrographItem
 from cryoem_annotation.annotation.click_collector import RealTimeClickCollector, create_bounded_overlay
 from cryoem_annotation.io.metadata import load_metadata, save_metadata, save_combined_results
 from cryoem_annotation.io.masks import load_mask_binary, save_mask_binary
@@ -19,7 +20,7 @@ from cryoem_annotation.navigation import NavigationWindow
 
 
 def annotate_micrographs(
-    micrograph_folder: Path,
+    dataset: GridDataset,
     checkpoint_path: Path,
     output_folder: Path,
     model_type: str = "vit_b",
@@ -29,7 +30,7 @@ def annotate_micrographs(
     Annotate micrographs using SAM segmentation.
 
     Args:
-        micrograph_folder: Path to folder containing micrographs
+        dataset: GridDataset containing micrographs to annotate
         checkpoint_path: Path to SAM checkpoint file
         output_folder: Path to output folder for results
         model_type: SAM model type ("vit_b", "vit_l", or "vit_h")
@@ -38,32 +39,39 @@ def annotate_micrographs(
     print("=" * 60)
     print("Interactive Micrograph Annotation Tool - REAL-TIME VERSION")
     print("=" * 60)
-    print(f"Micrograph folder: {micrograph_folder}")
+    print(f"Input: {dataset.root_path}")
+    if dataset.is_multi_grid:
+        print(f"Mode: Multi-grid ({len(dataset.grid_names)} grids)")
+        for grid_name in dataset.grid_names:
+            count = dataset.get_micrograph_count(grid_name)
+            print(f"  {grid_name}: {count} files")
+    else:
+        print("Mode: Single folder")
     print(f"Model type: {model_type}")
     print(f"Checkpoint: {checkpoint_path}")
     print(f"Output folder: {output_folder}")
     print("=" * 60)
-    
+
     # Load SAM model (can take 10-30 seconds)
     print(f"\nLoading SAM model: {model_type} from {checkpoint_path}")
     print("  (This may take a moment...)")
     sam_model = SAMModel(model_type, checkpoint_path, device)
     predictor = sam_model.get_predictor()
     print("  Model loaded successfully.")
-    
-    # Get all image files
-    image_files = get_image_files(micrograph_folder)
-    
-    if len(image_files) == 0:
-        print(f"No image files found in {micrograph_folder}")
+
+    # Get all micrograph items
+    items = dataset.get_micrographs()
+
+    if len(items) == 0:
+        print(f"No image files found in {dataset.root_path}")
         return
-    
-    print(f"Found {len(image_files)} micrograph(s)\n")
+
+    print(f"Found {len(items)} micrograph(s)\n")
     print("=" * 60)
-    
+
     # Create output folder
     output_folder.mkdir(parents=True, exist_ok=True)
-    
+
     # Results storage
     all_results = []
     completed_indices = set()
@@ -76,22 +84,36 @@ def annotate_micrographs(
         nav_state['action'] = action
         nav_state['target'] = target_index
 
-    # Create navigation window
-    nav_window = NavigationWindow(image_files, on_navigate, title="Annotation")
+    # Create navigation window with grid-aware mode
+    nav_window = NavigationWindow(
+        items,
+        on_navigate,
+        title="Annotation",
+        is_multi_grid=dataset.is_multi_grid,
+    )
 
     # Current collector and image data (for saving on navigation)
     current_collector = None
-    current_file_path = None
+    current_item: Optional[MicrographItem] = None
     current_micrograph_display = None
     current_micrograph_rgb = None
     current_pixel_size = None
 
+    def _get_output_dir(item: MicrographItem) -> Path:
+        """Get output directory for a micrograph item."""
+        if item.grid_name is not None:
+            # Multi-grid: output_folder/Grid1/micrograph_name/
+            return output_folder / item.grid_name / item.micrograph_name
+        else:
+            # Single folder: output_folder/micrograph_name/
+            return output_folder / item.micrograph_name
+
     def save_current_segmentations() -> None:
         """Save segmentations for the current file if any exist."""
-        nonlocal current_collector, current_file_path, current_micrograph_display
+        nonlocal current_collector, current_item, current_micrograph_display
         nonlocal current_micrograph_rgb, current_pixel_size
 
-        if current_collector is None or current_file_path is None:
+        if current_collector is None or current_item is None:
             return
 
         clicks = current_collector.clicks
@@ -100,10 +122,10 @@ def annotate_micrographs(
         if len(clicks) == 0:
             return
 
-        print(f"  [OK] Saving {len(clicks)} segmentation(s) for {current_file_path.name}")
+        print(f"  [OK] Saving {len(clicks)} segmentation(s) for {current_item.display_name}")
 
         # Create output directory for this image
-        image_output_dir = output_folder / current_file_path.stem
+        image_output_dir = _get_output_dir(current_item)
         image_output_dir.mkdir(parents=True, exist_ok=True)
 
         # Process segmentations for saving
@@ -130,8 +152,10 @@ def annotate_micrographs(
 
         # Save results for this image
         result = {
-            'filename': current_file_path.name,
-            'filepath': str(current_file_path),
+            'filename': current_item.file_path.name,
+            'filepath': str(current_item.file_path),
+            'micrograph_name': current_item.micrograph_name,
+            'grid_name': current_item.grid_name,
             'image_shape': list(current_micrograph_rgb.shape[:2]),
             'num_clicks': len(clicks),
             'timestamp': datetime.now().isoformat(),
@@ -150,7 +174,7 @@ def annotate_micrographs(
             clicks,
             all_masks,
             segmentations,
-            current_file_path.name,
+            current_item.display_name,
             image_output_dir / "overview.png"
         )
 
@@ -162,17 +186,23 @@ def annotate_micrographs(
 
     def load_file(idx: int) -> bool:
         """Load a file and set up the collector. Returns True if successful."""
-        nonlocal current_collector, current_file_path, current_micrograph_display
+        nonlocal current_collector, current_item, current_micrograph_display
         nonlocal current_micrograph_rgb, current_pixel_size
 
-        file_path = image_files[idx]
-        print(f"\n[{idx+1}/{len(image_files)}] Processing: {file_path.name}")
+        item = items[idx]
+        file_path = item.file_path
+
+        # Show grid context in progress message
+        if dataset.is_multi_grid:
+            print(f"\n[{idx+1}/{len(items)}] Processing: {item.display_name}")
+        else:
+            print(f"\n[{idx+1}/{len(items)}] Processing: {file_path.name}")
         print("-" * 60)
 
         # Load micrograph with pixel size from MRC header
         micrograph, pixel_size = load_micrograph_with_pixel_size(file_path)
         if micrograph is None:
-            print(f"  [ERROR] Failed to load {file_path.name}")
+            print(f"  [ERROR] Failed to load {item.display_name}")
             return False
 
         if pixel_size is not None:
@@ -191,10 +221,13 @@ def annotate_micrographs(
         predictor.set_image(micrograph_rgb)
 
         # Store current state
-        current_file_path = file_path
+        current_item = item
         current_micrograph_display = micrograph_display
         current_micrograph_rgb = micrograph_rgb
         current_pixel_size = pixel_size
+
+        # Use display_name for title (shows grid context)
+        title = item.display_name
 
         # Create or update collector
         if current_collector is None:
@@ -202,7 +235,7 @@ def annotate_micrographs(
                 micrograph_display,
                 micrograph_rgb,
                 predictor,
-                title=file_path.name,
+                title=title,
                 navigation_callback=on_navigate
             )
             if not current_collector.setup_figure():
@@ -210,10 +243,10 @@ def annotate_micrographs(
                 return False
         else:
             # Update existing collector with new image
-            current_collector.update_image(micrograph_display, micrograph_rgb, file_path.name)
+            current_collector.update_image(micrograph_display, micrograph_rgb, title)
 
         # Check for existing annotations and load them
-        existing_dir = output_folder / file_path.stem
+        existing_dir = _get_output_dir(item)
         existing_metadata_file = existing_dir / "metadata.json"
         if existing_metadata_file.exists():
             existing_metadata = load_metadata(existing_metadata_file)
@@ -248,7 +281,7 @@ def annotate_micrographs(
     # Main event-driven loop
     try:
         # Load first file
-        while nav_state['index'] < len(image_files):
+        while nav_state['index'] < len(items):
             if not load_file(nav_state['index']):
                 # Skip to next file if load failed
                 nav_state['index'] += 1
@@ -257,7 +290,7 @@ def annotate_micrographs(
             break
 
         # Event loop - process until quit
-        while nav_state['action'] != 'quit' and nav_state['index'] < len(image_files):
+        while nav_state['action'] != 'quit' and nav_state['index'] < len(items):
             # Process matplotlib and tkinter events
             plt.pause(0.05)
             nav_window.root.update()
@@ -298,7 +331,7 @@ def annotate_micrographs(
                     continue
 
                 # Bounds check
-                if new_index >= len(image_files):
+                if new_index >= len(items):
                     print("\n  [OK] Reached end of file list.")
                     break
 
@@ -323,11 +356,11 @@ def annotate_micrographs(
         if current_collector:
             current_collector.close_figure()
         nav_window.destroy()
-    
+
     # Save combined results
     combined_output = output_folder / "all_annotations.json"
     save_combined_results(all_results, combined_output)
-    
+
     print("\n" + "=" * 60)
     print(f"[OK] Annotation complete!")
     print(f"  Processed {len(all_results)} micrograph(s)")
@@ -379,4 +412,3 @@ def _save_overview_image(
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     plt.close()
-
