@@ -17,7 +17,7 @@ None
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation Refactoring** - Clean up technical debt, extract shared utilities
-- [ ] **Phase 2: Multi-Grid Data Model** - Grid-aware data structures and input parsing
+- [x] **Phase 2: Multi-Grid Data Model** - Grid-aware data structures and input parsing
 - [ ] **Phase 3: Grid-Aware UI** - Navigation and display with grid context
 - [ ] **Phase 4: Output & Extraction** - Grid-organized output and per-grid summaries
 
@@ -43,7 +43,10 @@ Key work:
 **Goal**: Add grid-aware data structures that understand the `motion_corrected/{Grid}/` structure from the transfer pipeline. Enable loading micrographs from multiple grids in a single session.
 **Depends on**: Phase 1
 **Research**: Unlikely (internal data structures, building on existing I/O code)
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [x] 02-01: Create GridDataset class and MicrographItem dataclass with tests
 
 Key work:
 - Create GridDataset class to represent multi-grid structure
@@ -83,6 +86,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation Refactoring | 2/2 | Complete | 2025-12-29 |
-| 2. Multi-Grid Data Model | 0/TBD | Not started | - |
+| 2. Multi-Grid Data Model | 1/1 | Complete | 2025-12-29 |
 | 3. Grid-Aware UI | 0/TBD | Not started | - |
 | 4. Output & Extraction | 0/TBD | Not started | - |
