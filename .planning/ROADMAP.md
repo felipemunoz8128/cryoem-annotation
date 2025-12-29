@@ -18,8 +18,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation Refactoring** - Clean up technical debt, extract shared utilities
 - [x] **Phase 2: Multi-Grid Data Model** - Grid-aware data structures and input parsing
-- [ ] **Phase 3: Grid-Aware UI** - Navigation and display with grid context
-- [ ] **Phase 4: Output & Extraction** - Grid-organized output and per-grid summaries
+- [x] **Phase 3: Grid-Aware UI** - Navigation and display with grid context
+- [x] **Phase 4: Output & Extraction** - Grid-organized output and per-grid summaries
 
 ## Phase Details
 
@@ -58,7 +58,10 @@ Key work:
 **Goal**: Extend the matplotlib UI to display grid context and enable navigation between grids. Users can jump to any micrograph from any grid within a single session.
 **Depends on**: Phase 2
 **Research**: Unlikely (extending existing matplotlib UI patterns)
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [x] 03-01: Grid-aware NavigationWindow, annotator integration, CLI update
 
 Key work:
 - Add grid context to display (title bar or panel)
@@ -70,7 +73,10 @@ Key work:
 **Goal**: Update output organization to mirror input structure (`results/{Grid}/`). Extend extraction to include grid context and produce per-grid summaries alongside combined output.
 **Depends on**: Phase 3
 **Research**: Unlikely (extending existing CSV/JSON output patterns)
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [x] 04-01: Grid-aware extraction with multi-grid detection and per-grid summaries
 
 Key work:
 - Organize output as `results/{Grid}/{micrograph}/`
@@ -87,5 +93,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Foundation Refactoring | 2/2 | Complete | 2025-12-29 |
 | 2. Multi-Grid Data Model | 1/1 | Complete | 2025-12-29 |
-| 3. Grid-Aware UI | 0/TBD | Not started | - |
-| 4. Output & Extraction | 0/TBD | Not started | - |
+| 3. Grid-Aware UI | 1/1 | Complete | 2025-12-29 |
+| 4. Output & Extraction | 1/1 | Complete | 2025-12-29 |

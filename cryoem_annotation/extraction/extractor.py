@@ -10,6 +10,25 @@ from tqdm import tqdm
 from cryoem_annotation.io.metadata import load_metadata
 
 
+def _detect_multi_grid_structure(results_folder: Path) -> bool:
+    """
+    Detect if results folder has multi-grid structure.
+
+    Multi-grid structure: results/{Grid}/{micrograph}/metadata.json
+    Single-folder structure: results/{micrograph}/metadata.json
+
+    Returns:
+        True if multi-grid structure detected, False otherwise.
+    """
+    for item in results_folder.iterdir():
+        if item.is_dir() and not item.name.startswith('.'):
+            # Check if this subdir contains further subdirs with metadata.json
+            nested_metadata = list(item.glob("*/metadata.json"))
+            if nested_metadata:
+                return True
+    return False
+
+
 def extract_segmentation_data(
     results_folder: Path,
     pixel_size_override: Optional[float] = None
@@ -28,18 +47,35 @@ def extract_segmentation_data(
     results_list = []
     seg_counter = 0  # Global segmentation counter
 
-    metadata_files = list(results_folder.glob("*/metadata.json"))
+    # Detect multi-grid vs single-folder structure
+    is_multi_grid = _detect_multi_grid_structure(results_folder)
+
+    if is_multi_grid:
+        metadata_files = list(results_folder.glob("*/*/metadata.json"))
+    else:
+        metadata_files = list(results_folder.glob("*/metadata.json"))
+
     total_micrographs = len(metadata_files)
 
     if total_micrographs == 0:
         print(f"No metadata.json files found in {results_folder}")
         return metadata_list, results_list, 0
 
-    print(f"\nFound {len(metadata_files)} metadata file(s)\n")
+    mode_str = "multi-grid" if is_multi_grid else "single-folder"
+    print(f"\nDetected {mode_str} structure")
+    print(f"Found {len(metadata_files)} metadata file(s)\n")
 
     for metadata_file in tqdm(sorted(metadata_files), desc="Extracting", unit="file"):
         micrograph_name = metadata_file.parent.name
-        print(f"Processing: {micrograph_name}")
+
+        # Extract grid name from path hierarchy for multi-grid structure
+        if is_multi_grid:
+            grid_name = metadata_file.parent.parent.name
+        else:
+            grid_name = None
+
+        display_name = f"{grid_name}/{micrograph_name}" if grid_name else micrograph_name
+        print(f"Processing: {display_name}")
 
         metadata = load_metadata(metadata_file)
         if metadata is None:
@@ -75,6 +111,7 @@ def extract_segmentation_data(
             # Metadata entry
             metadata_entry = {
                 'segmentation_id': seg_id,
+                'grid_name': grid_name,
                 'micrograph_name': micrograph_name,
                 'click_index': click_index,
                 'click_coords': seg.get('click_coords'),
@@ -103,7 +140,7 @@ def save_metadata_csv(data: List[Dict], output_file: Path) -> None:
         print("\nNo metadata to save.")
         return
 
-    fieldnames = ['segmentation_id', 'micrograph_name', 'click_index',
+    fieldnames = ['segmentation_id', 'grid_name', 'micrograph_name', 'click_index',
                   'click_coords', 'mask_score', 'area_pixels']
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -227,6 +264,27 @@ def print_summary(metadata: List[Dict], results: List[Dict], total_micrographs: 
     print(f"  Without segmentations: {micrographs_without_segs}")
     if total_micrographs > 0:
         print(f"  Average segmentations per micrograph: {total_segmentations / total_micrographs:.1f}")
+
+    # Per-grid breakdown (only if multi-grid data exists)
+    grids = set(d['grid_name'] for d in metadata if d['grid_name'] is not None)
+    if grids:
+        # Build mapping from segmentation_id to results for label info
+        results_by_id = {r['segmentation_id']: r for r in results}
+
+        print(f"\nPer-grid breakdown:")
+        for grid in sorted(grids):
+            grid_metadata = [d for d in metadata if d['grid_name'] == grid]
+            grid_micrographs = len(set(d['micrograph_name'] for d in grid_metadata))
+            grid_segmentations = len(grid_metadata)
+            grid_labeled = sum(
+                1 for d in grid_metadata
+                if results_by_id.get(d['segmentation_id'], {}).get('label') is not None
+            )
+            grid_unlabeled = grid_segmentations - grid_labeled
+            print(f"  {grid}:")
+            print(f"    Micrographs: {grid_micrographs}")
+            print(f"    Segmentations: {grid_segmentations} ({grid_labeled} labeled, {grid_unlabeled} unlabeled)")
+
     print("=" * 60)
 
 
