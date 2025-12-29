@@ -93,7 +93,35 @@ class RealTimeClickCollector:
         # Color palette for masks
         base_colors = generate_label_colors(50)
         self.colors = [[*rgb, 1.0] for rgb in base_colors]  # Add alpha channel
-    
+
+    def _predict_mask(self, x: int, y: int) -> tuple:
+        """
+        Run SAM prediction for a single point.
+
+        Args:
+            x: X coordinate of click
+            y: Y coordinate of click
+
+        Returns:
+            Tuple of (best_mask, best_score) where best_mask is the highest-scoring
+            mask from SAM's multi-mask output.
+        """
+        point_coords = np.array([[x, y]])
+        point_labels = np.array([1])  # Foreground point
+
+        masks, scores, logits = self.predictor.predict(
+            point_coords=point_coords,
+            point_labels=point_labels,
+            multimask_output=True,  # Get 3 masks
+        )
+
+        # Select best mask (highest score)
+        best_mask_idx = np.argmax(scores)
+        best_mask = masks[best_mask_idx]
+        best_score = scores[best_mask_idx]
+
+        return best_mask, best_score
+
     def on_click(self, event):
         """Handle mouse clicks."""
         if event.inaxes != self.ax:
@@ -120,22 +148,10 @@ class RealTimeClickCollector:
             x, y = int(event.xdata), int(event.ydata)
             
             print(f"  Processing click at ({x}, {y})...")
-            
-            # Run SAM prediction immediately
-            point_coords = np.array([[x, y]])
-            point_labels = np.array([1])  # Foreground point
-            
-            masks, scores, logits = self.predictor.predict(
-                point_coords=point_coords,
-                point_labels=point_labels,
-                multimask_output=True,  # Get 3 masks
-            )
-            
-            # Select best mask (highest score)
-            best_mask_idx = np.argmax(scores)
-            best_mask = masks[best_mask_idx]
-            best_score = scores[best_mask_idx]
-            
+
+            # Run SAM prediction
+            best_mask, best_score = self._predict_mask(x, y)
+
             print(f"    [OK] Segmentation created (score: {best_score:.3f})")
             
             # Store the click and segmentation
@@ -325,19 +341,10 @@ class RealTimeClickCollector:
                 if 0 <= x < w and 0 <= y < h:
                     clicks.append((x, y))
                     print(f"    [OK] Added click {len(clicks)}: ({x}, {y})")
-                    
+
                     # Run SAM prediction
-                    point_coords = np.array([[x, y]])
-                    point_labels = np.array([1])
-                    masks, scores, logits = self.predictor.predict(
-                        point_coords=point_coords,
-                        point_labels=point_labels,
-                        multimask_output=True,
-                    )
-                    best_mask_idx = np.argmax(scores)
-                    best_mask = masks[best_mask_idx]
-                    best_score = scores[best_mask_idx]
-                    
+                    best_mask, best_score = self._predict_mask(x, y)
+
                     seg_data = {
                         'click_index': len(clicks),
                         'click_coords': [int(x), int(y)],

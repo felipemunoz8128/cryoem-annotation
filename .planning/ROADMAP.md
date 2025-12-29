@@ -16,7 +16,7 @@ None
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation Refactoring** - Clean up technical debt, extract shared utilities
+- [x] **Phase 1: Foundation Refactoring** - Clean up technical debt, extract shared utilities
 - [ ] **Phase 2: Multi-Grid Data Model** - Grid-aware data structures and input parsing
 - [ ] **Phase 3: Grid-Aware UI** - Navigation and display with grid context
 - [ ] **Phase 4: Output & Extraction** - Grid-organized output and per-grid summaries
@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01: Extract matplotlib backend utility, improve backend logging
-- [ ] 01-02: Deduplicate SAM prediction logic, add .env.example
+- [x] 01-02: Deduplicate SAM prediction logic, add .env.example
 
 Key work:
 - Extract matplotlib backend initialization to shared utility
@@ -82,7 +82,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation Refactoring | 1/2 | In progress | - |
+| 1. Foundation Refactoring | 2/2 | Complete | 2025-12-29 |
 | 2. Multi-Grid Data Model | 0/TBD | Not started | - |
 | 3. Grid-Aware UI | 0/TBD | Not started | - |
 | 4. Output & Extraction | 0/TBD | Not started | - |
