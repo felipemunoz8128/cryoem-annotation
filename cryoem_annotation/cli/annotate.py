@@ -53,6 +53,7 @@ def main(micrographs: Optional[Path], checkpoint: Optional[Path],
 
     # Lazy import to speed up CLI startup
     from cryoem_annotation.core.grid_dataset import GridDataset
+    from cryoem_annotation.core.project import save_project
     from cryoem_annotation.annotation.annotator import annotate_micrographs
 
     # Create GridDataset - auto-detects multi-grid vs single-folder
@@ -66,6 +67,16 @@ def main(micrographs: Optional[Path], checkpoint: Optional[Path],
             click.echo(f"  {grid_name}: {count} files")
     else:
         click.echo(f"Single folder mode ({dataset.total_micrographs} files)")
+
+    # Create output folder and save project file
+    output_path = Path(output)
+    output_path.mkdir(parents=True, exist_ok=True)
+    project_file = save_project(
+        results_folder=output_path,
+        micrographs=micrograph_folder,
+        checkpoint=checkpoint_path,
+    )
+    click.echo(f"[OK] Project file created: {project_file}")
 
     # Run annotation
     annotate_micrographs(

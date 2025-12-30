@@ -5,6 +5,13 @@ from cryoem_annotation.core.image_loader import load_micrograph, get_image_files
 from cryoem_annotation.core.image_processing import normalize_image
 from cryoem_annotation.core.colors import generate_label_colors
 from cryoem_annotation.core.grid_dataset import GridDataset, MicrographItem
+from cryoem_annotation.core.project import (
+    PROJECT_FILE,
+    find_project_file,
+    load_project,
+    save_project,
+    resolve_paths,
+)
 
 __all__ = [
     "load_sam_model",
@@ -15,5 +22,10 @@ __all__ = [
     "generate_label_colors",
     "GridDataset",
     "MicrographItem",
+    "PROJECT_FILE",
+    "find_project_file",
+    "load_project",
+    "save_project",
+    "resolve_paths",
 ]
 
