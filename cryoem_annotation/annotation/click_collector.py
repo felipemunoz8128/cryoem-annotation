@@ -4,7 +4,7 @@ from typing import List, Dict, Tuple, Optional, Callable
 import numpy as np
 
 from cryoem_annotation.core.colors import generate_label_colors
-from cryoem_annotation.core.matplotlib_utils import plt
+from cryoem_annotation.core.matplotlib_utils import plt, get_screen_aware_figsize
 
 
 def create_bounded_overlay(mask: np.ndarray, color: list) -> Tuple[Optional[np.ndarray], Optional[list]]:
@@ -259,8 +259,8 @@ class RealTimeClickCollector:
             Tuple of (clicks list, segmentations list)
         """
         try:
-            # Optimize figure for performance
-            self.fig, self.ax = plt.subplots(figsize=(12, 12))
+            # Optimize figure for performance with screen-aware sizing
+            self.fig, self.ax = plt.subplots(figsize=get_screen_aware_figsize())
         except Exception as e:
             if "macOS" in str(e) or "2600" in str(e) or "1600" in str(e):
                 print(f"\n  [ERROR] Backend version check failed: {e}")
@@ -371,7 +371,7 @@ class RealTimeClickCollector:
             True if figure was created successfully, False otherwise.
         """
         try:
-            self.fig, self.ax = plt.subplots(figsize=(12, 12))
+            self.fig, self.ax = plt.subplots(figsize=get_screen_aware_figsize())
         except Exception as e:
             print(f"\n  [ERROR] Could not create figure: {e}")
             return False

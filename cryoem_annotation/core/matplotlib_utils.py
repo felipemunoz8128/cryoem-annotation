@@ -61,3 +61,40 @@ setup_interactive_backend()
 # Import and configure pyplot in interactive mode
 import matplotlib.pyplot as plt
 plt.ion()
+
+
+def get_screen_aware_figsize(
+    target_size: float = 12.0,
+    screen_fraction: float = 0.90,
+    fallback_size: float = 8.0,
+    dpi: float = 100.0
+) -> tuple[float, float]:
+    """Calculate figure size that fits within screen bounds.
+
+    This prevents figure window expansion issues in TurboVNC and other
+    environments where matplotlib remembers requested sizes even after
+    the window manager constrains them.
+
+    Args:
+        target_size: Desired figure size in inches (default 12.0)
+        screen_fraction: Fraction of screen to use (default 0.90)
+        fallback_size: Size if screen detection fails (default 8.0)
+        dpi: Matplotlib DPI setting (default 100.0)
+
+    Returns:
+        Tuple of (width, height) in inches, square aspect ratio.
+    """
+    try:
+        import tkinter as tk
+        root = tk.Tk()
+        root.withdraw()
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        root.destroy()
+
+        available_pixels = min(screen_width, screen_height) * screen_fraction
+        max_size_inches = available_pixels / dpi
+        final_size = min(target_size, max_size_inches)
+        return (final_size, final_size)
+    except Exception:
+        return (fallback_size, fallback_size)

@@ -9,7 +9,7 @@ from matplotlib.patches import Polygon
 
 from cryoem_annotation.core.image_loader import load_micrograph, get_image_files
 from cryoem_annotation.core.image_processing import normalize_image
-from cryoem_annotation.core.matplotlib_utils import plt
+from cryoem_annotation.core.matplotlib_utils import plt, get_screen_aware_figsize
 from cryoem_annotation.core.grid_dataset import GridDataset, MicrographItem
 from cryoem_annotation.io.metadata import load_metadata, save_metadata
 from cryoem_annotation.io.masks import load_mask_binary
@@ -325,7 +325,7 @@ class SegmentationLabeler:
             True if figure was created successfully, False otherwise.
         """
         try:
-            self.fig, self.ax = plt.subplots(figsize=(12, 12))
+            self.fig, self.ax = plt.subplots(figsize=get_screen_aware_figsize())
         except Exception as e:
             print(f"\n  [ERROR] Could not create figure: {e}")
             return False
@@ -391,7 +391,7 @@ class SegmentationLabeler:
     def label_segmentations(self) -> List[Dict]:
         """Display image with segmentations and collect labels."""
         try:
-            self.fig, self.ax = plt.subplots(figsize=(12, 12))
+            self.fig, self.ax = plt.subplots(figsize=get_screen_aware_figsize())
         except Exception as e:
             if "macOS" in str(e) or "2600" in str(e) or "1600" in str(e):
                 print(f"\n  [ERROR] Backend version check failed: {e}")
