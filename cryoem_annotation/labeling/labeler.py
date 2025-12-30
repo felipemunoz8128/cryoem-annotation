@@ -1,7 +1,7 @@
 """Interactive labeling tool for segmentations."""
 
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple, Callable
+from typing import List, Dict, Optional, Tuple, Callable, Union
 from datetime import datetime
 import numpy as np
 import cv2
@@ -10,6 +10,7 @@ from matplotlib.patches import Polygon
 from cryoem_annotation.core.image_loader import load_micrograph, get_image_files
 from cryoem_annotation.core.image_processing import normalize_image
 from cryoem_annotation.core.matplotlib_utils import plt
+from cryoem_annotation.core.grid_dataset import GridDataset, MicrographItem
 from cryoem_annotation.io.metadata import load_metadata, save_metadata
 from cryoem_annotation.io.masks import load_mask_binary
 from cryoem_annotation.labeling.categories import LabelCategories
@@ -486,22 +487,26 @@ class SegmentationLabeler:
         return self.segmentations
 
 
-def load_segmentations(results_folder: Path, micrograph_name: str) -> Optional[Dict]:
-    """Load segmentations for a micrograph from annotation results."""
-    micrograph_stem = Path(micrograph_name).stem
-    annotation_dir = results_folder / micrograph_stem
-    
+def load_segmentations_from_dir(annotation_dir: Path) -> Optional[Dict]:
+    """Load segmentations from an annotation directory.
+
+    Args:
+        annotation_dir: Path to the annotation directory containing metadata.json
+
+    Returns:
+        Metadata dict with loaded masks, or None if not found.
+    """
     if not annotation_dir.exists():
         return None
-    
+
     metadata_file = annotation_dir / "metadata.json"
     if not metadata_file.exists():
         return None
-    
+
     metadata = load_metadata(metadata_file)
     if metadata is None:
         return None
-    
+
     # Load binary masks
     masks = []
     for seg in metadata['segmentations']:
@@ -509,19 +514,55 @@ def load_segmentations(results_folder: Path, micrograph_name: str) -> Optional[D
         mask_file = annotation_dir / f"mask_{click_idx:03d}_binary.png"
         mask = load_mask_binary(mask_file)
         masks.append(mask)
-    
+
     # Add masks to segmentations
     for i, seg in enumerate(metadata['segmentations']):
         seg['mask'] = masks[i]
         if 'label' not in seg:
             seg['label'] = None
-    
+
     return metadata
+
+
+def load_segmentations(results_folder: Path, micrograph_name: str) -> Optional[Dict]:
+    """Load segmentations for a micrograph from annotation results.
+
+    This is a convenience function for single-folder mode. For multi-grid mode,
+    use load_segmentations_from_dir directly.
+
+    Args:
+        results_folder: Path to annotation results folder
+        micrograph_name: Micrograph filename (e.g., "image.mrc")
+
+    Returns:
+        Metadata dict with loaded masks, or None if not found.
+    """
+    micrograph_stem = Path(micrograph_name).stem
+    annotation_dir = results_folder / micrograph_stem
+    return load_segmentations_from_dir(annotation_dir)
+
+
+def _get_annotation_dir(item: MicrographItem, results_folder: Path) -> Path:
+    """Get annotation directory for a micrograph item.
+
+    Args:
+        item: MicrographItem instance
+        results_folder: Path to results folder
+
+    Returns:
+        Path to annotation directory (grid_name/micrograph_name or micrograph_name)
+    """
+    if item.grid_name is not None:
+        # Multi-grid: results_folder/Grid1/micrograph_name/
+        return results_folder / item.grid_name / item.micrograph_name
+    else:
+        # Single folder: results_folder/micrograph_name/
+        return results_folder / item.micrograph_name
 
 
 def label_segmentations(
     results_folder: Path,
-    micrograph_folder: Path,
+    dataset: GridDataset,
     categories: Optional[LabelCategories] = None,
 ) -> None:
     """
@@ -529,7 +570,7 @@ def label_segmentations(
 
     Args:
         results_folder: Path to annotation results folder
-        micrograph_folder: Path to micrograph folder
+        dataset: GridDataset containing micrographs
         categories: Label categories configuration (uses defaults if None)
     """
     # Use provided categories or defaults
@@ -538,26 +579,38 @@ def label_segmentations(
     print("=" * 60)
     print("Interactive Segmentation Labeling Tool")
     print("=" * 60)
-    print(f"Micrograph folder: {micrograph_folder}")
+    print(f"Input: {dataset.root_path}")
+    if dataset.is_multi_grid:
+        print(f"Mode: Multi-grid ({len(dataset.grid_names)} grids)")
+        for grid_name in dataset.grid_names:
+            count = dataset.get_micrograph_count(grid_name)
+            print(f"  {grid_name}: {count} files")
+    else:
+        print("Mode: Single folder")
     print(f"Annotation results folder: {results_folder}")
     print(f"Label categories: {', '.join(categories.names)}")
     print("=" * 60)
 
-    # Get micrograph files that have annotations
-    image_files = get_image_files(micrograph_folder)
+    # Get all micrograph items from dataset
+    all_items = dataset.get_micrographs()
 
-    annotated_files = []
-    for f in image_files:
-        stem = f.stem
-        annotation_dir = results_folder / stem
+    # Filter to only items that have annotations
+    annotated_items: List[MicrographItem] = []
+    for item in all_items:
+        annotation_dir = _get_annotation_dir(item, results_folder)
         if annotation_dir.exists() and (annotation_dir / "metadata.json").exists():
-            annotated_files.append(f)
+            annotated_items.append(item)
 
-    if len(annotated_files) == 0:
-        print(f"No micrographs with annotations found in {micrograph_folder}")
+    if len(annotated_items) == 0:
+        print(f"[WARNING] No micrographs with annotations found.")
+        print(f"  Searched in: {results_folder}")
+        if dataset.is_multi_grid:
+            print(f"  Expected structure: {results_folder}/<grid_name>/<micrograph_name>/metadata.json")
+        else:
+            print(f"  Expected structure: {results_folder}/<micrograph_name>/metadata.json")
         return
 
-    print(f"\nFound {len(annotated_files)} micrograph(s) with segmentations\n")
+    print(f"\nFound {len(annotated_items)} micrograph(s) with segmentations\n")
     print("=" * 60)
 
     # Track completed files and processed count
@@ -572,19 +625,24 @@ def label_segmentations(
         nav_state['action'] = action
         nav_state['target'] = target_index
 
-    # Create navigation window
-    nav_window = NavigationWindow(annotated_files, on_navigate, title="Labeling")
+    # Create navigation window with grid-aware mode
+    nav_window = NavigationWindow(
+        annotated_items,
+        on_navigate,
+        title="Labeling",
+        is_multi_grid=dataset.is_multi_grid,
+    )
 
     # Current labeler and metadata
     current_labeler = None
-    current_file_path = None
+    current_item: Optional[MicrographItem] = None
     current_metadata = None
 
     def save_current_labels() -> None:
         """Save labels for the current file."""
-        nonlocal current_labeler, current_file_path, current_metadata, processed_count
+        nonlocal current_labeler, current_item, current_metadata, processed_count
 
-        if current_labeler is None or current_file_path is None or current_metadata is None:
+        if current_labeler is None or current_item is None or current_metadata is None:
             return
 
         segmentations = current_labeler.segmentations
@@ -593,10 +651,10 @@ def label_segmentations(
         if labeled_count == 0:
             return
 
-        print(f"  [OK] Saving labels for {current_file_path.name}")
+        print(f"  [OK] Saving labels for {current_item.display_name}")
 
-        # Save updated metadata
-        annotation_dir = results_folder / current_file_path.stem
+        # Get annotation directory for this item
+        annotation_dir = _get_annotation_dir(current_item, results_folder)
 
         # Remove mask arrays before saving
         serializable_segmentations = []
@@ -618,22 +676,29 @@ def label_segmentations(
 
     def load_file(idx: int) -> bool:
         """Load a file and set up the labeler. Returns True if successful."""
-        nonlocal current_labeler, current_file_path, current_metadata
+        nonlocal current_labeler, current_item, current_metadata
 
-        file_path = annotated_files[idx]
-        print(f"\n[{idx+1}/{len(annotated_files)}] Labeling: {file_path.name}")
+        item = annotated_items[idx]
+
+        # Show grid context in progress message
+        if dataset.is_multi_grid:
+            print(f"\n[{idx+1}/{len(annotated_items)}] Labeling: {item.display_name}")
+        else:
+            print(f"\n[{idx+1}/{len(annotated_items)}] Labeling: {item.file_path.name}")
         print("-" * 60)
 
-        micrograph = load_micrograph(file_path)
+        micrograph = load_micrograph(item.file_path)
         if micrograph is None:
-            print(f"  [ERROR] Failed to load {file_path.name}")
+            print(f"  [ERROR] Failed to load {item.display_name}")
             return False
 
         micrograph_display = normalize_image(micrograph, percentile=(1, 99))
 
-        metadata = load_segmentations(results_folder, file_path.name)
+        # Load segmentations from grid-aware annotation directory
+        annotation_dir = _get_annotation_dir(item, results_folder)
+        metadata = load_segmentations_from_dir(annotation_dir)
         if metadata is None:
-            print(f"  [ERROR] No segmentations found for {file_path.name}")
+            print(f"  [ERROR] No segmentations found for {item.display_name}")
             return False
 
         segmentations = metadata['segmentations']
@@ -644,15 +709,18 @@ def label_segmentations(
             print(f"  -> {already_labeled} already labeled, {len(segmentations) - already_labeled} unlabeled")
 
         # Store current state
-        current_file_path = file_path
+        current_item = item
         current_metadata = metadata
+
+        # Use display_name for title (shows grid context)
+        title = item.display_name
 
         # Create or update labeler
         if current_labeler is None:
             current_labeler = SegmentationLabeler(
                 micrograph_display,
                 segmentations,
-                title=file_path.name,
+                title=title,
                 categories=categories,
                 navigation_callback=on_navigate
             )
@@ -661,7 +729,7 @@ def label_segmentations(
                 return False
         else:
             # Update existing labeler with new data
-            current_labeler.update_data(micrograph_display, segmentations, file_path.name)
+            current_labeler.update_data(micrograph_display, segmentations, title)
 
         print("\n  Figure window opened. Label segmentations by clicking on them.")
         print("  Instructions:")
@@ -679,7 +747,7 @@ def label_segmentations(
     # Main event-driven loop
     try:
         # Load first file
-        while nav_state['index'] < len(annotated_files):
+        while nav_state['index'] < len(annotated_items):
             if not load_file(nav_state['index']):
                 # Skip to next file if load failed
                 nav_state['index'] += 1
@@ -688,7 +756,7 @@ def label_segmentations(
             break
 
         # Event loop - process until quit
-        while nav_state['action'] != 'quit' and nav_state['index'] < len(annotated_files):
+        while nav_state['action'] != 'quit' and nav_state['index'] < len(annotated_items):
             # Process matplotlib and tkinter events
             plt.pause(0.05)
             nav_window.root.update()
@@ -719,7 +787,7 @@ def label_segmentations(
                     continue
 
                 # Bounds check
-                if new_index >= len(annotated_files):
+                if new_index >= len(annotated_items):
                     print("\n  [OK] Reached end of file list.")
                     break
 

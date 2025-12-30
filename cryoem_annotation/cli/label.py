@@ -11,7 +11,7 @@ from cryoem_annotation.config import load_config
 @click.option('--results', '-r', type=click.Path(exists=True, path_type=Path),
               required=True, help='Path to annotation results folder')
 @click.option('--micrographs', '-m', type=click.Path(exists=True, path_type=Path),
-              help='Path to micrograph folder')
+              help='Path to micrograph folder (single folder or multi-grid root)')
 @click.option('--config', type=click.Path(exists=True, path_type=Path),
               help='Path to config file')
 def main(results: Path, micrographs: Optional[Path], config: Optional[Path]):
@@ -20,6 +20,10 @@ def main(results: Path, micrographs: Optional[Path], config: Optional[Path]):
 
     This tool loads previously created segmentations and allows you to assign
     categorical labels (mature, immature, etc.) by clicking on the objects.
+
+    Supports both single-folder and multi-grid input structures:
+    - Single folder: micrographs/*.mrc
+    - Multi-grid: micrographs/{Grid1,Grid2,...}/*.mrc
 
     Default keyboard shortcuts: 1=mature, 2=immature, 3=indeterminate, 4=other, 5=empty
     """
@@ -34,8 +38,21 @@ def main(results: Path, micrographs: Optional[Path], config: Optional[Path]):
         return
 
     # Lazy import to speed up CLI startup
+    from cryoem_annotation.core.grid_dataset import GridDataset
     from cryoem_annotation.labeling.labeler import label_segmentations
     from cryoem_annotation.labeling.categories import LabelCategories
+
+    # Create GridDataset - auto-detects multi-grid vs single-folder
+    dataset = GridDataset(micrograph_folder)
+
+    # Print detected structure
+    if dataset.is_multi_grid:
+        click.echo(f"Detected multi-grid structure ({len(dataset.grid_names)} grids)")
+        for grid_name in dataset.grid_names:
+            count = dataset.get_micrograph_count(grid_name)
+            click.echo(f"  {grid_name}: {count} files")
+    else:
+        click.echo(f"Single folder mode ({dataset.total_micrographs} files)")
 
     # Load label categories from config (or use defaults)
     categories_config = cfg.get('labeling.categories')
@@ -44,7 +61,7 @@ def main(results: Path, micrographs: Optional[Path], config: Optional[Path]):
     # Run labeling
     label_segmentations(
         results_folder=results,
-        micrograph_folder=micrograph_folder,
+        dataset=dataset,
         categories=categories,
     )
 
