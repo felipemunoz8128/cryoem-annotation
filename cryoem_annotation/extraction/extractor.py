@@ -9,6 +9,9 @@ from tqdm import tqdm
 
 from cryoem_annotation.io.metadata import load_metadata
 
+# Type alias for per-grid data: Dict[grid_name -> (metadata_list, results_list)]
+PerGridData = Dict[str, Tuple[List[Dict], List[Dict]]]
+
 
 def _detect_multi_grid_structure(results_folder: Path) -> bool:
     """
@@ -32,7 +35,7 @@ def _detect_multi_grid_structure(results_folder: Path) -> bool:
 def extract_segmentation_data(
     results_folder: Path,
     pixel_size_override: Optional[float] = None
-) -> Tuple[List[Dict], List[Dict], int]:
+) -> Tuple[List[Dict], List[Dict], PerGridData, int]:
     """
     Extract labels and areas from all metadata.json files.
 
@@ -41,11 +44,16 @@ def extract_segmentation_data(
         pixel_size_override: Override pixel size in nm/pixel for all micrographs
 
     Returns:
-        Tuple of (metadata_list, results_list, total_micrographs)
+        Tuple of (combined_metadata, combined_results, per_grid_data, total_micrographs)
+        - combined_metadata: All metadata entries with global IDs
+        - combined_results: All results entries with global IDs
+        - per_grid_data: Dict mapping grid_name -> (metadata_list, results_list) with local IDs
+        - total_micrographs: Total number of micrographs processed
     """
-    metadata_list = []
-    results_list = []
-    seg_counter = 0  # Global segmentation counter
+    combined_metadata = []
+    combined_results = []
+    per_grid_data: PerGridData = {}
+    global_seg_counter = 0  # Global segmentation counter
 
     # Detect multi-grid vs single-folder structure
     is_multi_grid = _detect_multi_grid_structure(results_folder)
@@ -59,11 +67,14 @@ def extract_segmentation_data(
 
     if total_micrographs == 0:
         print(f"No metadata.json files found in {results_folder}")
-        return metadata_list, results_list, 0
+        return combined_metadata, combined_results, per_grid_data, 0
 
     mode_str = "multi-grid" if is_multi_grid else "single-folder"
     print(f"\nDetected {mode_str} structure")
     print(f"Found {len(metadata_files)} metadata file(s)\n")
+
+    # Track per-grid local ID counters
+    grid_seg_counters: Dict[str, int] = {}
 
     for metadata_file in tqdm(sorted(metadata_files), desc="Extracting", unit="file"):
         micrograph_name = metadata_file.parent.name
@@ -92,11 +103,22 @@ def extract_segmentation_data(
         if pixel_size_nm is None:
             pixel_size_nm = metadata.get('pixel_size_nm')
 
+        # Initialize per-grid tracking if needed
+        if grid_name is not None and grid_name not in per_grid_data:
+            per_grid_data[grid_name] = ([], [])
+            grid_seg_counters[grid_name] = 0
+
         # Extract data for each segmentation
         for seg in segmentations:
-            seg_counter += 1
-            seg_id = seg_counter
+            global_seg_counter += 1
+            global_seg_id = global_seg_counter
             click_index = seg.get('click_index')
+
+            # Track local ID for this grid (if multi-grid)
+            local_seg_id = None
+            if grid_name is not None:
+                grid_seg_counters[grid_name] += 1
+                local_seg_id = grid_seg_counters[grid_name]
 
             # Get area and calculate diameter
             area_pixels = seg.get('mask_area')
@@ -108,9 +130,9 @@ def extract_segmentation_data(
                 area_nm2 = area_pixels * (pixel_size_nm ** 2)
                 diameter_nm = math.sqrt(4 * area_nm2 / math.pi)
 
-            # Metadata entry
-            metadata_entry = {
-                'segmentation_id': seg_id,
+            # Combined metadata entry (global ID)
+            combined_metadata_entry = {
+                'segmentation_id': global_seg_id,
                 'grid_name': grid_name,
                 'micrograph_name': micrograph_name,
                 'click_index': click_index,
@@ -118,39 +140,68 @@ def extract_segmentation_data(
                 'mask_score': seg.get('mask_score'),
                 'area_pixels': area_pixels,
             }
-            metadata_list.append(metadata_entry)
+            combined_metadata.append(combined_metadata_entry)
 
-            # Results entry
-            results_entry = {
-                'segmentation_id': seg_id,
+            # Combined results entry (global ID)
+            combined_results_entry = {
+                'segmentation_id': global_seg_id,
                 'label': seg.get('label'),
                 'diameter_nm': diameter_nm,
             }
-            results_list.append(results_entry)
+            combined_results.append(combined_results_entry)
+
+            # Per-grid entries (local IDs, no grid_name since implicit from folder)
+            if grid_name is not None:
+                per_grid_metadata_entry = {
+                    'segmentation_id': local_seg_id,
+                    'micrograph_name': micrograph_name,
+                    'click_index': click_index,
+                    'click_coords': seg.get('click_coords'),
+                    'mask_score': seg.get('mask_score'),
+                    'area_pixels': area_pixels,
+                }
+                per_grid_results_entry = {
+                    'segmentation_id': local_seg_id,
+                    'label': seg.get('label'),
+                    'diameter_nm': diameter_nm,
+                }
+                per_grid_data[grid_name][0].append(per_grid_metadata_entry)
+                per_grid_data[grid_name][1].append(per_grid_results_entry)
 
         labeled_count = sum(1 for s in segmentations if s.get('label') is not None)
         print(f"  [OK] Extracted {len(segmentations)} segmentation(s) ({labeled_count} labeled)")
 
-    return metadata_list, results_list, total_micrographs
+    return combined_metadata, combined_results, per_grid_data, total_micrographs
 
 
-def save_metadata_csv(data: List[Dict], output_file: Path) -> None:
-    """Save metadata entries to CSV file."""
+def save_metadata_csv(data: List[Dict], output_file: Path, include_grid_name: bool = True) -> None:
+    """
+    Save metadata entries to CSV file.
+
+    Args:
+        data: List of metadata dictionaries to save
+        output_file: Path to output CSV file
+        include_grid_name: Whether to include grid_name column (default True)
+    """
     if len(data) == 0:
         print("\nNo metadata to save.")
         return
 
-    fieldnames = ['segmentation_id', 'grid_name', 'micrograph_name', 'click_index',
-                  'click_coords', 'mask_score', 'area_pixels']
+    if include_grid_name:
+        fieldnames = ['segmentation_id', 'grid_name', 'micrograph_name', 'click_index',
+                      'click_coords', 'mask_score', 'area_pixels']
+    else:
+        fieldnames = ['segmentation_id', 'micrograph_name', 'click_index',
+                      'click_coords', 'mask_score', 'area_pixels']
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
         writer.writeheader()
 
         for entry in data:
             row = entry.copy()
-            if row['click_coords'] is not None:
+            if row.get('click_coords') is not None:
                 row['click_coords'] = f"[{row['click_coords'][0]}, {row['click_coords'][1]}]"
             writer.writerow(row)
 
@@ -298,6 +349,27 @@ def extract_results(
     """
     Extract results from annotation folder.
 
+    In multi-grid mode, creates per-grid extraction files inside each grid folder
+    plus combined summary files at the results root:
+        results/
+        ├── grid1/
+        │   ├── extraction_metadata.csv   # Grid1 only, local IDs (1,2,3...)
+        │   ├── extraction_results.csv
+        │   └── extraction.json
+        ├── grid2/
+        │   ├── extraction_metadata.csv   # Grid2 only, local IDs (1,2,3...)
+        │   ├── extraction_results.csv
+        │   └── extraction.json
+        ├── summary_metadata.csv          # Combined, global IDs, has grid_name column
+        ├── summary_results.csv
+        └── summary.json
+
+    In single-folder mode, creates extraction files at results root (unchanged):
+        results/
+        ├── extraction_metadata.csv
+        ├── extraction_results.csv
+        └── extraction.json
+
     Args:
         results_folder: Path to annotation results folder
         micrograph_folder: Path to micrograph folder (for accurate total count)
@@ -321,8 +393,10 @@ def extract_results(
         print(f"[ERROR] Annotation results folder not found: {results_folder}")
         return
 
-    # Extract data
-    metadata, results, annotated_micrographs = extract_segmentation_data(results_folder, pixel_size_override)
+    # Extract data (now returns per-grid data as well)
+    metadata, results, per_grid_data, annotated_micrographs = extract_segmentation_data(
+        results_folder, pixel_size_override
+    )
 
     if len(metadata) == 0:
         print("\n[ERROR] No segmentation data found.")
@@ -337,24 +411,67 @@ def extract_results(
     # Print summary
     print_summary(metadata, results, total_micrographs)
 
+    # Determine if multi-grid mode (per_grid_data will be non-empty)
+    is_multi_grid = len(per_grid_data) > 0
+
     # Determine output base path
     if output_path is None:
-        output_base = results_folder / "extraction"
+        output_base = results_folder
     else:
-        # Remove extension if provided to use as base
         output_base = output_path.with_suffix('')
 
-    # Save to files
     print(f"\nSaving results...")
-    if output_format in ["csv", "both"]:
-        metadata_csv = Path(str(output_base) + "_metadata.csv")
-        results_csv = Path(str(output_base) + "_results.csv")
-        save_metadata_csv(metadata, metadata_csv)
-        save_results_csv(results, results_csv)
 
-    if output_format in ["json", "both"]:
-        json_path = Path(str(output_base) + ".json")
-        save_to_json(metadata, results, json_path)
+    if is_multi_grid:
+        # Multi-grid mode: save per-grid files and combined summary files
+
+        # Save per-grid extraction files
+        for grid_name, (grid_metadata, grid_results) in sorted(per_grid_data.items()):
+            grid_output_base = results_folder / grid_name / "extraction"
+            print(f"\nSaving {grid_name} extraction files...")
+
+            if output_format in ["csv", "both"]:
+                grid_metadata_csv = Path(str(grid_output_base) + "_metadata.csv")
+                grid_results_csv = Path(str(grid_output_base) + "_results.csv")
+                # Per-grid files: local IDs, NO grid_name column
+                save_metadata_csv(grid_metadata, grid_metadata_csv, include_grid_name=False)
+                save_results_csv(grid_results, grid_results_csv)
+
+            if output_format in ["json", "both"]:
+                grid_json_path = Path(str(grid_output_base) + ".json")
+                save_to_json(grid_metadata, grid_results, grid_json_path)
+
+        # Save combined summary files at results root
+        print(f"\nSaving combined summary files...")
+        summary_base = output_base / "summary"
+
+        if output_format in ["csv", "both"]:
+            summary_metadata_csv = Path(str(summary_base) + "_metadata.csv")
+            summary_results_csv = Path(str(summary_base) + "_results.csv")
+            # Summary files: global IDs, WITH grid_name column
+            save_metadata_csv(metadata, summary_metadata_csv, include_grid_name=True)
+            save_results_csv(results, summary_results_csv)
+
+        if output_format in ["json", "both"]:
+            summary_json_path = Path(str(summary_base) + ".json")
+            save_to_json(metadata, results, summary_json_path)
+
+    else:
+        # Single-folder mode: unchanged behavior (extraction_* files at results root)
+        if output_path is None:
+            output_base_file = results_folder / "extraction"
+        else:
+            output_base_file = output_path.with_suffix('')
+
+        if output_format in ["csv", "both"]:
+            metadata_csv = Path(str(output_base_file) + "_metadata.csv")
+            results_csv = Path(str(output_base_file) + "_results.csv")
+            save_metadata_csv(metadata, metadata_csv, include_grid_name=True)
+            save_results_csv(results, results_csv)
+
+        if output_format in ["json", "both"]:
+            json_path = Path(str(output_base_file) + ".json")
+            save_to_json(metadata, results, json_path)
 
     print("\n" + "=" * 60)
     print("Extraction complete!")
