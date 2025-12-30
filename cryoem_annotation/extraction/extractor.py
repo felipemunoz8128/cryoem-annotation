@@ -142,9 +142,10 @@ def extract_segmentation_data(
             }
             combined_metadata.append(combined_metadata_entry)
 
-            # Combined results entry (global ID)
+            # Combined results entry (global ID, includes grid_name for summary)
             combined_results_entry = {
                 'segmentation_id': global_seg_id,
+                'grid_name': grid_name,
                 'label': seg.get('label'),
                 'diameter_nm': diameter_nm,
             }
@@ -208,17 +209,20 @@ def save_metadata_csv(data: List[Dict], output_file: Path, include_grid_name: bo
     print(f"[OK] Saved {len(data)} entries to {output_file}")
 
 
-def save_results_csv(data: List[Dict], output_file: Path) -> None:
+def save_results_csv(data: List[Dict], output_file: Path, include_grid_name: bool = False) -> None:
     """Save results entries to CSV file."""
     if len(data) == 0:
         print("\nNo results to save.")
         return
 
-    fieldnames = ['segmentation_id', 'label', 'diameter_nm']
+    if include_grid_name:
+        fieldnames = ['segmentation_id', 'grid_name', 'label', 'diameter_nm']
+    else:
+        fieldnames = ['segmentation_id', 'label', 'diameter_nm']
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
         writer.writeheader()
 
         for entry in data:
@@ -450,7 +454,7 @@ def extract_results(
             summary_results_csv = Path(str(summary_base) + "_results.csv")
             # Summary files: global IDs, WITH grid_name column
             save_metadata_csv(metadata, summary_metadata_csv, include_grid_name=True)
-            save_results_csv(results, summary_results_csv)
+            save_results_csv(results, summary_results_csv, include_grid_name=True)
 
         if output_format in ["json", "both"]:
             summary_json_path = Path(str(summary_base) + ".json")
