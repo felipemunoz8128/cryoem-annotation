@@ -13,6 +13,7 @@ from cryoem_annotation.core.image_loader import load_micrograph_with_pixel_size
 from cryoem_annotation.core.image_processing import normalize_image
 from cryoem_annotation.core.colors import generate_label_colors
 from cryoem_annotation.core.grid_dataset import GridDataset, MicrographItem
+from cryoem_annotation.core.project import get_all_completion_states, set_completion_state, find_project_file
 from cryoem_annotation.annotation.click_collector import RealTimeClickCollector, create_bounded_overlay
 from cryoem_annotation.io.metadata import load_metadata, save_metadata, save_combined_results
 from cryoem_annotation.io.masks import load_mask_binary, save_mask_binary
@@ -92,6 +93,39 @@ def annotate_micrographs(
         is_multi_grid=dataset.is_multi_grid,
     )
 
+    # Find project file for tracking completion state
+    project_file = find_project_file(output_folder)
+
+    # Initialize completion states from project file and existing metadata
+    pre_completed_count = 0
+    if project_file:
+        states = get_all_completion_states(project_file, "annotation")
+    else:
+        states = {}
+
+    for idx, item in enumerate(items):
+        key = (f"{item.grid_name}/{item.micrograph_name}"
+               if item.grid_name is not None else item.micrograph_name)
+
+        # Check project state first
+        if states.get(key) == "completed":
+            completed_indices.add(idx)
+            nav_window.mark_completed(idx)
+            pre_completed_count += 1
+        else:
+            # Backward compatibility: check for existing metadata.json
+            existing_dir = (output_folder / item.grid_name / item.micrograph_name
+                           if item.grid_name is not None
+                           else output_folder / item.micrograph_name)
+            metadata_file = existing_dir / "metadata.json"
+            if metadata_file.exists():
+                completed_indices.add(idx)
+                nav_window.mark_completed(idx)
+                pre_completed_count += 1
+
+    if pre_completed_count > 0:
+        print(f"  [OK] Found {pre_completed_count} previously completed micrograph(s)")
+
     # Current collector and image data (for saving on navigation)
     current_collector = None
     current_item: Optional[MicrographItem] = None
@@ -107,6 +141,12 @@ def annotate_micrographs(
         else:
             # Single folder: output_folder/micrograph_name/
             return output_folder / item.micrograph_name
+
+    def _get_micrograph_key(item: MicrographItem) -> str:
+        """Get the key used for tracking completion state."""
+        if item.grid_name is not None:
+            return f"{item.grid_name}/{item.micrograph_name}"
+        return item.micrograph_name
 
     def save_current_segmentations() -> None:
         """Save segmentations for the current file if any exist."""
@@ -308,6 +348,10 @@ def annotate_micrographs(
                     # Mark as done even if no segmentations
                     completed_indices.add(nav_state['index'])
                     nav_window.mark_completed(nav_state['index'])
+                    # Update completion state in project file
+                    if project_file and current_item:
+                        set_completion_state(project_file, "annotation",
+                                           _get_micrograph_key(current_item), "completed")
                     break
 
                 # Save current segmentations before navigating
@@ -315,6 +359,10 @@ def annotate_micrographs(
                 # Mark as done even if no segmentations
                 completed_indices.add(nav_state['index'])
                 nav_window.mark_completed(nav_state['index'])
+                # Update completion state in project file
+                if project_file and current_item:
+                    set_completion_state(project_file, "annotation",
+                                       _get_micrograph_key(current_item), "completed")
 
                 # Clear current collector's segmentations for new file
                 if current_collector:

@@ -1,268 +1,123 @@
 # Cryo-EM Annotation Tool
 
-Interactive annotation tool for engineered virus-like particles (eVLPs) in cryo-electron microscopy micrographs using Segment Anything Model (SAM).
+Interactive annotation tool for cryo-electron microscopy micrographs using Segment Anything Model (SAM).
 
 ## Features
 
-- **Interactive Annotation**: Click on objects in micrographs to automatically segment them using SAM
-- **Real-time Segmentation**: See segmentation results immediately as you click
-- **Multi-Grid Support**: Process multiple grids from motion correction transfer pipelines (`motion_corrected/{Grid}/`)
-- **Grid-Aware Navigation**: Jump between any micrograph from any grid within a single session
-- **Labeling Tool**: Assign labels (0-9) to segmented objects
-- **Data Extraction**: Export results to CSV or JSON format with grid context and per-grid summaries
-- **Pixel Size Support**: Automatic extraction from MRC headers with CLI override option
-- **Physical Units**: Calculate equivalent diameter in nm when pixel size is available
-- **Support for MRC files**: Native support for cryo-EM MRC file format
-- **GPU/CPU Support**: Automatic GPU detection with CPU fallback
+- **Real-time Segmentation**: Click on objects to instantly segment them using SAM
+- **Multi-Grid Support**: Process multiple grids from motion correction pipelines (`motion_corrected/{Grid}/`)
+- **Session Resume**: Previously completed files are marked on restart (`[x]` done, `[~]` partial, `[ ]` pending)
+- **Labeling Tool**: Assign categorical labels to segmented objects
+- **Data Extraction**: Export to CSV/JSON with physical measurements (nm)
+- **MRC Support**: Native cryo-EM format with automatic pixel size extraction
+- **GPU/CPU**: Automatic GPU detection with CPU fallback
 
 ## Installation
 
 ### Prerequisites
+- **Conda** (Miniconda or Anaconda)
+- **SAM Checkpoint**: [ViT-B (recommended, 350MB)](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth)
 
-1. **Conda** (Miniconda or Anaconda)
-2. **SAM Checkpoint**: Download a SAM checkpoint file:
-   - [ViT-B (smallest, recommended)](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth) (~350MB)
-   - [ViT-L](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth) (~1.2GB)
-   - [ViT-H](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth) (~2.4GB)
+### Install
 
-### Install with Conda
-
-**CPU-only (works everywhere):**
 ```bash
-# Clone the repository
 git clone https://github.com/felipemunoz8128/cryoem-annotation.git
 cd cryoem-annotation
-
-# Create conda environment (CPU version)
-conda env create -f environment.yml
-
-# Activate the environment
+conda env create -f environment.yml      # CPU (or environment-gpu.yml for GPU)
 conda activate cryoem-annotation
-
-# Install the package in development mode
 pip install -e .
 ```
 
-**GPU support (faster, requires NVIDIA GPU with CUDA):**
-```bash
-# Clone the repository
-git clone https://github.com/felipemunoz8128/cryoem-annotation.git
-cd cryoem-annotation
+## Usage
 
-# Create conda environment with GPU support
-conda env create -f environment-gpu.yml
-
-# Activate the environment
-conda activate cryoem-annotation-gpu
-
-# Install the package in development mode
-pip install -e .
-```
-
-**Note**: 
-- `environment.yml` installs CPU-only PyTorch (works on all systems)
-- `environment-gpu.yml` installs PyTorch with CUDA support (requires NVIDIA GPU with CUDA 11.8 or 12.1)
-- The tool will automatically use GPU if available, otherwise falls back to CPU
-
-## Quick Start
-
-### 1. Annotate Micrographs
-
-**Single folder of micrographs:**
-```bash
-cryoem-annotate \
-    --micrographs /path/to/micrographs \
-    --checkpoint sam_vit_b_01ec64.pth \
-    --output annotation_results
-```
-
-**Multi-grid dataset (from motion correction pipeline):**
-```bash
-cryoem-annotate \
-    --micrographs /path/to/motion_corrected \
-    --checkpoint sam_vit_b_01ec64.pth \
-    --output annotation_results
-```
-
-The tool automatically detects multi-grid structure (`motion_corrected/{Grid}/*.mrc`) and organizes output accordingly.
-
-**Interactive Controls:**
-- **Left-click**: Segment an object (mask appears immediately)
-- **Right-click** or **Arrow keys**: Navigate between micrographs
-- **Press 'd' or 'u'**: Undo last segmentation
-- **Escape**: Finish session
-
-A navigation window shows all files organized by grid (for multi-grid datasets) with checkmarks for completed ones.
-
-### 2. Label Segmentations
+### 1. Annotate
 
 ```bash
-cryoem-label \
-    --results annotation_results \
-    --micrographs /path/to/micrographs
+cryoem-annotate -m /path/to/micrographs -c sam_vit_b_01ec64.pth -o results
 ```
 
-**Interactive Controls:**
-- **Press '0'-'9'**: Set active label (numeric or string labels)
-- **Left-click**: Assign active label to clicked segmentation
-- **Right-click** or **Arrow keys**: Navigate between micrographs
-- **Escape**: Finish session
+**Controls:**
+- **Left-click**: Segment object
+- **Right-click / Arrow keys**: Navigate files
+- **'d' or 'u'**: Undo last segmentation
+- **Escape**: Finish
 
-A navigation window shows all files with checkmarks for completed ones.
-
-### 3. Extract Results
+### 2. Label
 
 ```bash
-cryoem-extract \
-    --results annotation_results \
-    --micrographs /path/to/micrographs \
-    --output results \
-    --format csv
+cryoem-label -r results -m /path/to/micrographs
 ```
 
-The `--micrographs` flag is optional but recommended for accurate statistics (counts all micrographs including those without segmentations).
+**Controls:**
+- **'0'-'9'**: Select label
+- **Left-click**: Assign label to segmentation
+- **Right-click / Arrow keys**: Navigate files
+- **Escape**: Finish
 
-This creates two CSV files:
-- `extraction_metadata.csv`: Segmentation IDs, micrograph names, coordinates, scores, and area (pixels)
-- `extraction_results.csv`: Labels and equivalent diameter (nm, if pixel size available)
-
-## Configuration
-
-You can use a YAML config file to avoid specifying paths every time:
-
-```yaml
-# config.yaml
-micrograph_folder: "/path/to/micrographs"
-sam_model:
-  type: "vit_b"  # vit_b, vit_l, or vit_h
-  checkpoint_path: "sam_vit_b_01ec64.pth"
-output:
-  folder: "annotation_results"
-  create_overview: true
-  save_masks: true
-image:
-  extensions: [".mrc", ".tif", ".tiff", ".png", ".jpg", ".jpeg"]
-  normalization:
-    method: "percentile"
-    percentile_range: [1, 99]
-```
-
-Then use it with:
+### 3. Extract
 
 ```bash
-cryoem-annotate --config config.yaml
+cryoem-extract -r results -m /path/to/micrographs -o output -f csv
 ```
 
-## Command-Line Options
+Creates two CSVs:
+- `output_metadata.csv`: IDs, coordinates, scores, area (pixels)
+- `output_results.csv`: Labels, diameter (nm)
 
-### `cryoem-annotate`
+## Project Workflow
 
-```
-Options:
-  --micrographs, -m PATH    Path to micrograph folder (required)
-  --checkpoint, -c PATH     Path to SAM checkpoint file (required)
-  --model-type TEXT         SAM model type: vit_b, vit_l, or vit_h [default: vit_b]
-  --output, -o PATH         Output folder [default: annotation_results]
-  --config PATH             Path to config file
-  --device TEXT             Device: cuda, cpu, or auto [default: auto]
-```
+After the first annotation run, a `.cryoem-project.json` file is created in your results folder. This saves your paths, so subsequent commands can auto-detect them:
 
-Note: Pixel size is automatically extracted from MRC file headers when available.
-
-### `cryoem-label`
-
-```
-Options:
-  --results, -r PATH        Path to annotation results folder (required)
-  --micrographs, -m PATH     Path to micrograph folder (required)
-  --config PATH              Path to config file
+```bash
+cd results
+cryoem-label          # No need to specify paths again
+cryoem-extract -o my_data
 ```
 
-### `cryoem-extract`
+## Command Reference
 
-```
-Options:
-  --results, -r PATH        Path to annotation results folder (required)
-  --micrographs, -m PATH    Path to micrograph folder (for accurate total count)
-  --output, -o PATH         Output file base path (default: extraction in results folder)
-  --format, -f TEXT         Output format: csv, json, or both [default: csv]
-  --pixel-size, -p FLOAT    Pixel size in nm/pixel (overrides stored metadata values)
-```
+### cryoem-annotate
+| Option | Description |
+|--------|-------------|
+| `-m, --micrographs` | Path to micrographs folder |
+| `-c, --checkpoint` | Path to SAM checkpoint |
+| `-o, --output` | Output folder (default: `annotation_results`) |
+| `--model-type` | SAM model: `vit_b`, `vit_l`, `vit_h` (default: `vit_b`) |
+| `--device` | `cuda`, `cpu`, or `auto` (default: `auto`) |
+
+### cryoem-label
+| Option | Description |
+|--------|-------------|
+| `-r, --results` | Path to annotation results |
+| `-m, --micrographs` | Path to micrographs folder |
+
+### cryoem-extract
+| Option | Description |
+|--------|-------------|
+| `-r, --results` | Path to annotation results |
+| `-m, --micrographs` | Path to micrographs (for accurate counts) |
+| `-o, --output` | Output file base path |
+| `-f, --format` | `csv`, `json`, or `both` (default: `csv`) |
+| `-p, --pixel-size` | Override pixel size (nm/pixel) |
 
 ## Output Structure
 
-**Single-folder mode:**
 ```
-annotation_results/
-├── micrograph_name_1/
-│   ├── metadata.json          # Annotation metadata
-│   ├── overview.png           # Visualization
-│   ├── mask_001_binary.png    # Binary masks
-│   └── ...
-├── micrograph_name_2/
-│   └── ...
-└── all_annotations.json       # Combined results
+results/
+├── .cryoem-project.json     # Project config (auto-created)
+├── Grid1/                   # Per-grid folders (multi-grid mode)
+│   └── micrograph_001/
+│       ├── metadata.json
+│       ├── overview.png
+│       └── mask_*.png
+└── all_annotations.json
 ```
 
-**Multi-grid mode:**
-```
-annotation_results/
-├── Grid1/
-│   ├── micrograph_001/
-│   │   ├── metadata.json      # Includes grid_name field
-│   │   ├── overview.png
-│   │   └── ...
-│   └── micrograph_002/
-│       └── ...
-├── Grid2/
-│   └── ...
-└── all_annotations.json       # Combined results with grid context
-```
+## Supported Formats
 
-**After extraction:**
-```
-extraction_metadata.csv        # Segmentation IDs, grid names, micrograph names, coordinates, scores, area (pixels)
-extraction_results.csv         # Labels, equivalent diameter (nm)
-```
-
-For multi-grid datasets, the extraction summary includes per-grid statistics showing micrograph counts, segmentation counts, and labeled/unlabeled breakdown for each grid.
-
-## Python API
-
-You can also use the package programmatically:
-
-```python
-from pathlib import Path
-from cryoem_annotation import annotate_micrographs, label_segmentations, extract_results
-
-# Annotate
-annotate_micrographs(
-    micrograph_folder=Path("data/micrographs"),
-    checkpoint_path=Path("sam_vit_b_01ec64.pth"),
-    output_folder=Path("results/annotations"),
-    model_type="vit_b",
-)
-
-# Label
-label_segmentations(
-    results_folder=Path("results/annotations"),
-    micrograph_folder=Path("data/micrographs"),
-)
-
-# Extract
-extract_results(
-    results_folder=Path("results/annotations"),
-    output_path=Path("results/final_data.csv"),
-    output_format="csv",
-)
-```
-
-## Supported File Formats
-
-- **MRC files**: Native cryo-EM format (`.mrc`)
-- **Image files**: `.tif`, `.tiff`, `.png`, `.jpg`, `.jpeg`
+- **MRC** (`.mrc`) - with automatic pixel size extraction
+- **Images**: `.tif`, `.tiff`, `.png`, `.jpg`, `.jpeg`
 
 ## Acknowledgements
 
-- Built using [Segment Anything Model (SAM)](https://github.com/facebookresearch/segment-anything) by Meta AI Research
-- Segment Anything Model: [Kirillov et al., 2023](https://arxiv.org/abs/2304.02643)
+Built with [Segment Anything Model](https://github.com/facebookresearch/segment-anything) by Meta AI Research ([Kirillov et al., 2023](https://arxiv.org/abs/2304.02643))

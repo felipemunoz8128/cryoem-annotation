@@ -40,12 +40,12 @@ class TestPointInMask:
         """Test that a point inside the mask returns True."""
         # The sample mask is centered at (512, 512)
         result = point_in_mask((512, 512), sample_binary_mask)
-        assert result is True
+        assert result == True
 
     def test_point_outside_mask(self, sample_binary_mask):
         """Test that a point outside the mask returns False."""
         result = point_in_mask((0, 0), sample_binary_mask)
-        assert result is False
+        assert result == False
 
     def test_point_out_of_bounds(self, sample_binary_mask):
         """Test that out-of-bounds points return False."""

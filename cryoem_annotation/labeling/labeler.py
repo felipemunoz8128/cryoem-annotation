@@ -11,6 +11,7 @@ from cryoem_annotation.core.image_loader import load_micrograph, get_image_files
 from cryoem_annotation.core.image_processing import normalize_image
 from cryoem_annotation.core.matplotlib_utils import plt, get_screen_aware_figsize
 from cryoem_annotation.core.grid_dataset import GridDataset, MicrographItem
+from cryoem_annotation.core.project import get_all_completion_states, set_completion_state, find_project_file
 from cryoem_annotation.io.metadata import load_metadata, save_metadata
 from cryoem_annotation.io.masks import load_mask_binary
 from cryoem_annotation.labeling.categories import LabelCategories
@@ -560,6 +561,20 @@ def _get_annotation_dir(item: MicrographItem, results_folder: Path) -> Path:
         return results_folder / item.micrograph_name
 
 
+def _get_micrograph_key(item: MicrographItem) -> str:
+    """Get the key used for tracking completion state.
+
+    Args:
+        item: MicrographItem instance
+
+    Returns:
+        Key string like "grid1/micro1" for multi-grid or just "micro1" for single folder.
+    """
+    if item.grid_name is not None:
+        return f"{item.grid_name}/{item.micrograph_name}"
+    return item.micrograph_name
+
+
 def label_segmentations(
     results_folder: Path,
     dataset: GridDataset,
@@ -633,6 +648,50 @@ def label_segmentations(
         is_multi_grid=dataset.is_multi_grid,
     )
 
+    # Find project file for state tracking
+    project_file = find_project_file(results_folder)
+
+    # Initialize completion states from project file + backward compat from metadata
+    pre_marked_count = 0
+    if project_file:
+        labeling_states = get_all_completion_states(project_file, "labeling")
+    else:
+        labeling_states = {}
+
+    for idx, item in enumerate(annotated_items):
+        key = _get_micrograph_key(item)
+
+        # Check project file state first
+        if key in labeling_states:
+            state = labeling_states[key]
+            if state == "completed":
+                nav_window.mark_completed(idx)
+                completed_indices.add(idx)
+                pre_marked_count += 1
+            elif state == "in_progress":
+                nav_window.mark_in_progress(idx)
+                pre_marked_count += 1
+        else:
+            # Backward compat: check metadata.json for existing labels
+            annotation_dir = _get_annotation_dir(item, results_folder)
+            metadata_file = annotation_dir / "metadata.json"
+            if metadata_file.exists():
+                metadata = load_metadata(metadata_file)
+                if metadata and 'segmentations' in metadata:
+                    segs = metadata['segmentations']
+                    total = len(segs)
+                    labeled = sum(1 for s in segs if s.get('label') is not None)
+                    if total > 0 and labeled == total:
+                        nav_window.mark_completed(idx)
+                        completed_indices.add(idx)
+                        pre_marked_count += 1
+                    elif labeled > 0:
+                        nav_window.mark_in_progress(idx)
+                        pre_marked_count += 1
+
+    if pre_marked_count > 0:
+        print(f"  [OK] Pre-marked {pre_marked_count} micrograph(s) with existing labels")
+
     # Current labeler and metadata
     current_labeler = None
     current_item: Optional[MicrographItem] = None
@@ -646,6 +705,7 @@ def label_segmentations(
             return
 
         segmentations = current_labeler.segmentations
+        total_count = len(segmentations)
         labeled_count = sum(1 for s in segmentations if s.get('label') is not None)
 
         if labeled_count == 0:
@@ -667,12 +727,26 @@ def label_segmentations(
 
         save_metadata(current_metadata, annotation_dir / "metadata.json")
 
-        print(f"  [OK] Saved labels: {labeled_count}/{len(segmentations)} labeled")
+        print(f"  [OK] Saved labels: {labeled_count}/{total_count} labeled")
 
-        # Mark as completed in navigation
-        completed_indices.add(nav_state['index'])
-        nav_window.mark_completed(nav_state['index'])
-        processed_count += 1
+        # Determine completion status based on label count
+        if labeled_count == total_count:
+            status = "completed"
+        else:
+            status = "in_progress"
+
+        # Update project file completion state
+        if project_file:
+            key = _get_micrograph_key(current_item)
+            set_completion_state(project_file, "labeling", key, status)
+
+        # Update navigation window
+        if status == "completed":
+            completed_indices.add(nav_state['index'])
+            nav_window.mark_completed(nav_state['index'])
+            processed_count += 1
+        else:
+            nav_window.mark_in_progress(nav_state['index'])
 
     def load_file(idx: int) -> bool:
         """Load a file and set up the labeler. Returns True if successful."""

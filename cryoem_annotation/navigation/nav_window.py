@@ -41,6 +41,7 @@ class NavigationWindow:
         self.on_navigate = on_navigate
         self.current_index = 0
         self.completed: Set[int] = set()
+        self.in_progress: Set[int] = set()
         self.is_multi_grid = is_multi_grid
 
         # For multi-grid mode: map listbox row index to file index
@@ -205,6 +206,8 @@ class NavigationWindow:
             # Build display text with status indicator
             if i in self.completed:
                 prefix = "[x]"
+            elif i in self.in_progress:
+                prefix = "[~]"
             elif i == self.current_index:
                 prefix = " > "
             else:
@@ -224,6 +227,8 @@ class NavigationWindow:
                 self.listbox.itemconfig(row, fg="#0066cc", selectbackground="#0066cc")
             elif i in self.completed:
                 self.listbox.itemconfig(row, fg="#228b22")  # Forest green
+            elif i in self.in_progress:
+                self.listbox.itemconfig(row, fg="#cc6600")  # Orange
 
         # Ensure current item is visible
         if 0 <= self.current_index < len(self.files):
@@ -261,6 +266,8 @@ class NavigationWindow:
             # Insert file entry
             if file_index in self.completed:
                 prefix = "[x]"
+            elif file_index in self.in_progress:
+                prefix = "[~]"
             elif file_index == self.current_index:
                 prefix = " > "
             else:
@@ -281,6 +288,8 @@ class NavigationWindow:
                 self.listbox.itemconfig(row, fg="#0066cc", selectbackground="#0066cc")
             elif file_index in self.completed:
                 self.listbox.itemconfig(row, fg="#228b22")  # Forest green
+            elif file_index in self.in_progress:
+                self.listbox.itemconfig(row, fg="#cc6600")  # Orange
 
             file_index += 1
 
@@ -369,6 +378,19 @@ class NavigationWindow:
         """
         if 0 <= index < len(self.files):
             self.completed.add(index)
+            self.in_progress.discard(index)
+            self._refresh_list()
+
+    def mark_in_progress(self, index: int) -> None:
+        """Mark a file as in-progress (partially labeled).
+
+        Args:
+            index: Index of in-progress file
+        """
+        if 0 <= index < len(self.files):
+            self.in_progress.add(index)
+            # Remove from completed if it was there
+            self.completed.discard(index)
             self._refresh_list()
 
     def destroy(self) -> None:

@@ -205,3 +205,103 @@ def resolve_paths(
         resolved['checkpoint'] = None
 
     return resolved
+
+
+def get_completion_state(
+    project_file: Path,
+    workflow: str,
+    micrograph_key: str
+) -> Optional[str]:
+    """Get the completion state for a micrograph in a workflow.
+
+    Args:
+        project_file: Path to .cryoem-project.json file.
+        workflow: Workflow name ("annotation" or "labeling").
+        micrograph_key: Relative path key like "grid1/micro1" or just "micro1".
+
+    Returns:
+        Completion state ("completed", "in_progress") or None if not set.
+    """
+    if not project_file.exists():
+        return None
+
+    try:
+        with open(project_file, 'r') as f:
+            data = json.load(f)
+    except Exception:
+        return None
+
+    completion_state = data.get('completion_state', {})
+    workflow_state = completion_state.get(workflow, {})
+    return workflow_state.get(micrograph_key)
+
+
+def set_completion_state(
+    project_file: Path,
+    workflow: str,
+    micrograph_key: str,
+    status: str
+) -> None:
+    """Update the completion state for a micrograph in a workflow.
+
+    Args:
+        project_file: Path to .cryoem-project.json file.
+        workflow: Workflow name ("annotation" or "labeling").
+        micrograph_key: Relative path key like "grid1/micro1" or just "micro1".
+        status: Completion status ("completed", "in_progress").
+
+    Note:
+        Creates the completion_state structure if it doesn't exist.
+        Preserves all other data in the project file.
+    """
+    # Load existing data
+    data = {}
+    if project_file.exists():
+        try:
+            with open(project_file, 'r') as f:
+                data = json.load(f)
+        except Exception:
+            pass  # Start fresh if file is corrupted
+
+    # Ensure completion_state structure exists
+    if 'completion_state' not in data:
+        data['completion_state'] = {}
+    if workflow not in data['completion_state']:
+        data['completion_state'][workflow] = {}
+
+    # Update the state
+    data['completion_state'][workflow][micrograph_key] = status
+
+    # Update timestamp
+    data['updated'] = datetime.now().isoformat()
+
+    # Write back
+    with open(project_file, 'w') as f:
+        json.dump(data, f, indent=2)
+        f.write('\n')  # Trailing newline
+
+
+def get_all_completion_states(
+    project_file: Path,
+    workflow: str
+) -> Dict[str, str]:
+    """Get all completion states for a workflow.
+
+    Args:
+        project_file: Path to .cryoem-project.json file.
+        workflow: Workflow name ("annotation" or "labeling").
+
+    Returns:
+        Dictionary mapping micrograph_key to status, or empty dict if no states exist.
+    """
+    if not project_file.exists():
+        return {}
+
+    try:
+        with open(project_file, 'r') as f:
+            data = json.load(f)
+    except Exception:
+        return {}
+
+    completion_state = data.get('completion_state', {})
+    return completion_state.get(workflow, {})
