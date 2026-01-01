@@ -291,16 +291,6 @@ def print_summary(metadata: List[Dict], results: List[Dict], total_micrographs: 
         for label in int_labels:
             print(f"  Label {label} (legacy): {label_counts[label]} object(s)")
 
-    # Area statistics in pixels (from metadata)
-    areas_pixels = [d['area_pixels'] for d in metadata if d['area_pixels'] is not None]
-    if areas_pixels:
-        print(f"\nMask area statistics (pixels):")
-        print(f"  Total objects: {len(areas_pixels)}")
-        print(f"  Mean area: {sum(areas_pixels) / len(areas_pixels):.1f}")
-        print(f"  Median area: {sorted(areas_pixels)[len(areas_pixels)//2]:.1f}")
-        print(f"  Min area: {min(areas_pixels)}")
-        print(f"  Max area: {max(areas_pixels)}")
-
     # Diameter statistics in nm (if available)
     diameters_nm = [d['diameter_nm'] for d in results if d['diameter_nm'] is not None]
     if diameters_nm:
@@ -408,7 +398,9 @@ def extract_results(
 
     # Get total micrograph count from folder if provided, otherwise use annotated count
     if micrograph_folder is not None:
-        total_micrographs = len(get_image_files(micrograph_folder))
+        from cryoem_annotation.core.grid_dataset import GridDataset
+        dataset = GridDataset(micrograph_folder)
+        total_micrographs = dataset.total_micrographs
     else:
         total_micrographs = annotated_micrographs
 
