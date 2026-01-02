@@ -2,7 +2,7 @@
 
 Interactive annotation tool for cryo-electron microscopy micrographs using Segment Anything Model (SAM).
 
-Here is a [video](https://youtu.be/Dth3aiiHcMM?si=dGNzbGPEQ0RfgX8I) demonstrating how to use this project.
+Click [here](https://youtu.be/Dth3aiiHcMM?si=dGNzbGPEQ0RfgX8I) to watch a video showing how to use this project.
 
 ## Features
 
