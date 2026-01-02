@@ -2,6 +2,8 @@
 
 Interactive annotation tool for cryo-electron microscopy micrographs using Segment Anything Model (SAM).
 
+Here is a [video](https://youtu.be/Dth3aiiHcMM?si=dGNzbGPEQ0RfgX8I) demonstrating how to use this project.
+
 ## Features
 
 - **Real-time Segmentation**: Click on objects to instantly segment them using SAM
